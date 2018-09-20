@@ -324,3 +324,10 @@ timer ticks | R(A) | R(B) | R(C) | P(A) | P(B) | P(C) | thread to run
 
 ## Ambiguities
 There were some ambiguities in how to resolve which thread to run in certain scenarios, specifically when the priority of two threads were equal. For example, we can see that the first time P(A) and P(B) are equal is at tick 8. This was resolved by using the recency of a thread as the determinant in our queue. The least recently used was put to the front of the queue while the thread previous to that was loaded into the queue based on its priority in relation to the other entries in the queue. This is why A shows up before C in the aforementioned example, as P(A) = 61 and P(C) = 59, instead of the other way around if we only consider recency.
+
+Thus, as a general outline of the algorithm we have:
+1. Check priority of current threads.
+2. Choose a thread:
+  * If there exists a thread with a higher priority than others, choose that as the current thread to run. The others remain on the queue, ready to run when they have sufficient priority.
+  * If there exist threads with the same priority, determine which one was run more frequently. To determine this, check the recency score and pick the thread with a lower score. The others remain on the queue, ready to run when they have sufficient priority.
+3. Continue running until the threads are resolved.
