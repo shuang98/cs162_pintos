@@ -176,7 +176,7 @@ In terms of performance, (2) is preferable. (See reasoning).
 ## Synchronization
 **Ensure synchronization when modifying donation lists**: We can simply use a plain semaphore for each donation list in the thread struct (`donations` and `donated_to`) to ensure synchronization. References to these semaphores be within the thread struct as well. Thus, when a thread tries to modify a donation list it will attempt to down the corresponding semaphore. If another thread has already downed the same semaphore, it means that it is currently working on the same donation list. Thus, threads will access each donation_list atomically. Furthermore, since semaphore waiting lists now consider effective priority, higher priority threads will be allowed to modify donations before threads with lower priority.
 
-**Ensure synchronization when modifying semaphore's waiters list**: Ensuring that the semaphore's waiters list gets properly synchronized proves to be a tougher issue as we are not allowed to use any given locks implementations. Thus, the only way to correctly/accurately modify this list is to disable all interrupts, execute the appropriate modifications, then re-enable all interrupts. In order to minimize the amount of code that is run when all interrupts are disabled, implementing the first option for `sema_up()` seems more intuitive. 
+**Ensure synchronization when modifying semaphore's waiters list**: Ensuring that the semaphore's waiters list gets properly synchronized proves to be a tougher issue as we are not allowed to use any given locks implementations. Thus, the only way to correctly/accurately modify this list is to disable all interrupts, execute the appropriate modifications, then re-enable all interrupts. In order to minimize the amount of code that is run when all interrupts are disabled, implementing the first option for `sema_up()` seems more intuitive.
 
 (Synchronization for condition variables seems to be already implemented with locks.)
 
@@ -262,7 +262,7 @@ void update_load_avg(int ready_thread_count)
 /* Iterate through all threads and call the function passed in as the argument */
 void update_iterator(*func)
 ```
-We create two update functions to pass into our iterator 
+We create two update functions to pass into our iterator
 ```c
 /* Update recent cpu of thread using formula provided in spec */
 void update_recent_cpu(thread* thread)
@@ -299,7 +299,7 @@ Since `thread_tick` is where all the calculations happen, there won't be any syn
 
 # Additional Questions
 ## Test
-Assume we have 4 threads, A, B, C, and D. For the first 3, we can assign the priority values of 20, 30, and 40 (the actual values of B and C don’t matter too much, as long as B is less than C and both are less than D). Now, let’s say we also have a semaphore. Since C has the highest priority, we can have C take the semaphore and B will use the lock. Then, if we launch D (since B uses the lock) with priority 60, we can have B now use the semaphore. Currently we have the following thread priorities (in descending order): D (60), C (43), B (30), and A (20). Thus, D will now want the lock, leading A to reenable the semaphore, yield a thread, and reenable the semaphore again, since B and C both use the semaphore.
+Assume we have 4 threads, A, B, C, and D, and that we initially have thread A (the parent) spawn threads B and C (the children). For A, B, and C, we can assign the respective priority values of 20, 30, and 40 (the actual values of B and C don’t matter too much, as long as B is less than C and both are less than D). Now, let’s say we also have a semaphore and lock, both with value 0. Since C has the highest priority, we can have C take the semaphore and B will use the lock. Then, if we launch D (since B uses the lock) with priority 60, we can have B now use the semaphore. Currently we have the following thread priorities (in descending order): D (60), C (43), B (30), and A (20). Thus, D will now want the lock, leading A to reenable the semaphore, yield a thread, and reenable the semaphore again, since B and C both use the semaphore. However, since D had a higher priority than the threads using the lock, D will perform a priority donation in order to resolve the issue of the lock quickly. This is what the test intends to test, how the resolution of the lock's priority works once a donation occurs.
 
 ## Expected Output
 Since B is going to receive a priority donation from D in order to resolve the lock, the first time the semaphore is enabled it should resolve B rather than C. Thus, the second call will inherently release C. As a result, if we were to print the threads in order of release from the semaphore, we print “B” and “C” in that order.
@@ -324,4 +324,3 @@ timer ticks | R(A) | R(B) | R(C) | P(A) | P(B) | P(C) | thread to run
 
 ## Ambiguities
 There were some ambiguities in how to resolve which thread to run in certain scenarios, specifically when the priority of two threads were equal. For example, we can see that the first time P(A) and P(B) are equal is at tick 8. This was resolved by using the recency of a thread as the determinant in our queue. The least recently used was put to the front of the queue while the thread previous to that was loaded into the queue based on its priority in relation to the other entries in the queue. This is why A shows up before C in the aforementioned example, as P(A) = 61 and P(C) = 59, instead of the other way around if we only consider recency.
-
