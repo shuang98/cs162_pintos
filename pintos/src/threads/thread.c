@@ -11,6 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "../devices/timer.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -23,6 +24,9 @@
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
+
+/* list of sleeping threads */
+static struct list sleeping_list;
 
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
@@ -71,6 +75,9 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
+void thread_sleep (int64_t wakeup_tick);
+bool sleep_list_compare (const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED);
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -92,7 +99,7 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
-
+  list_init (&sleeping_list); // initialize sleeping list for threads
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
   init_thread (initial_thread, "main", PRI_DEFAULT);
@@ -123,7 +130,17 @@ void
 thread_tick (void)
 {
   struct thread *t = thread_current ();
-
+  if (!list_empty (&sleeping_list)) {
+    int64_t curr_time = timer_ticks ();
+    struct list_elem *e = list_begin(&sleeping_list);
+    struct thread *current_thread = list_entry (e, struct thread, elem);
+    while (!list_empty (&sleeping_list) && curr_time >= current_thread->sleep_until) {
+      list_pop_front (&sleeping_list);
+      thread_unblock (current_thread);
+      e = list_begin(&sleeping_list);
+      current_thread = list_entry (e, struct thread, elem);
+    }
+  }
   /* Update statistics. */
   if (t == idle_thread)
     idle_ticks++;
@@ -133,6 +150,8 @@ thread_tick (void)
 #endif
   else
     kernel_ticks++;
+
+  
 
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
@@ -266,6 +285,29 @@ thread_current (void)
   ASSERT (t->status == THREAD_RUNNING);
 
   return t;
+}
+
+/* adds the thread to the sleeping list with the given wakeup_tick */
+void
+thread_sleep (int64_t wakeup_tick)
+{
+  struct thread *current_thread = thread_current ();
+  current_thread->sleep_until = wakeup_tick;
+  // printf("SLEEPING : %s\n", current_thread->name);
+  intr_disable ();
+  list_push_back (&sleeping_list, &(current_thread->elem));
+  list_sort(&sleeping_list, sleep_list_compare, NULL);
+  thread_block ();
+}
+
+/* returns true if a's sleep_until is < b's sleep_until, false otherwise
+    (list_less_func) */
+bool
+sleep_list_compare (const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED)
+{
+  const struct thread *a = list_entry (a_, struct thread, elem);
+  const struct thread *b = list_entry (b_, struct thread, elem);
+  return a->sleep_until < b->sleep_until;
 }
 
 /* Returns the running thread's tid. */
@@ -559,9 +601,9 @@ schedule (void)
   ASSERT (intr_get_level () == INTR_OFF);
   ASSERT (cur->status != THREAD_RUNNING);
   ASSERT (is_thread (next));
-
-  if (cur != next)
+  if (cur != next) {
     prev = switch_threads (cur, next);
+  }
   thread_schedule_tail (prev);
 }
 
