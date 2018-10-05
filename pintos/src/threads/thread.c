@@ -548,12 +548,16 @@ alloc_frame (struct thread *t, size_t size)
 static struct thread *
 next_thread_to_run (void)
 {
-  if (list_empty (&ready_list))
-    return idle_thread;
-  else
-    return list_entry (list_pop_front (&ready_list), struct thread, elem);
-    // return list_entry (list_max(&ready_list, priority_insert_desc_compare, NULL), struct thread, elem);
-
+  if (!thread_mlfqs) {
+    if (list_empty (&ready_list))
+      return idle_thread;
+    else
+      return list_entry (list_pop_front (&ready_list), struct thread, elem);
+      // return list_entry (list_max(&ready_list, priority_insert_desc_compare, NULL), struct thread, elem);
+  } else {
+    // TODO: Pop from mlfqs queue!
+    return NULL;
+  }
 }
 
 /* Completes a thread switch by activating the new thread's page
@@ -642,6 +646,9 @@ allocate_tid (void)
 int
 thread_effective_priority (struct thread *selected_thread) {
   int max = selected_thread->priority;
+  if (thread_mlfqs) {
+    return max;
+  }
   enum intr_level old_intr_lvl = intr_disable ();
   struct list_elem *e = list_begin (&selected_thread->received_donations);
   while (e != list_tail(&(selected_thread->received_donations))) {
