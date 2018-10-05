@@ -29,7 +29,6 @@ static struct list ready_list;
 static struct list mlfq[64];
 // load average
 static fixed_point_t load_avg;
-static int ready_threads = 1;
 /* list of sleeping threads */
 static struct list sleeping_list;
 
@@ -826,6 +825,18 @@ update_recent_cpu_tick (void) {
 
 void
 update_load_avg (void) {
+  int ready_threads;
+  if (thread_current () == idle_thread) {
+    ready_threads = 0;
+  } else {
+    ready_threads = 1;
+  }
+  int i;
+  for (i = 0; i < 64; i += 1) {
+    if (!list_empty (&mlfq[i])) {
+      ready_threads += list_size (&mlfq[i]);
+    }
+  }
   fixed_point_t result = fix_frac(59, 60);
   result = fix_mul(result, load_avg);
   result = fix_add(fix_mul(fix_frac(1, 60), fix_int(ready_threads)), result);
@@ -836,7 +847,6 @@ update_load_avg (void) {
 void
 mlfq_insert (struct thread *thread) {
   list_push_back(&mlfq[thread->priority], &thread->elem);
-  ready_threads++;
 }
 
 struct thread*
@@ -848,10 +858,8 @@ mlfq_pop (void) {
     }
   }
   if (i < 0) {
-    ready_threads = 0;
     return idle_thread;
   }
-  ready_threads--;
 
   return list_entry(list_pop_front(&mlfq[i]), struct thread, elem);
 }
