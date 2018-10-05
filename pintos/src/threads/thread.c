@@ -259,7 +259,11 @@ thread_unblock (struct thread *t)
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
   // list_push_back (&ready_list, &t->elem);
-  list_insert_ordered(&ready_list, &t->elem, priority_insert_desc_compare, NULL);
+  if (!thread_mlfqs) {
+    list_insert_ordered(&ready_list, &t->elem, priority_insert_desc_compare, NULL);
+  } else {
+    // TODO: Put back in to mlfqsin correct order!
+  }
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -358,9 +362,13 @@ thread_yield (void)
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
-  if (cur != idle_thread)
-    // list_push_back (&ready_list, &cur->elem);
-    list_insert_ordered(&ready_list, &cur->elem, priority_insert_desc_compare, NULL);
+  if (cur != idle_thread) {
+    if (!thread_mlfqs) {
+      list_insert_ordered(&ready_list, &cur->elem, priority_insert_desc_compare, NULL);
+    } else {
+      // TODO: Put back into mlfqs in correct spot!
+    }
+  } 
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
