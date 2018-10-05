@@ -109,7 +109,7 @@ thread_init (void)
 {
   ASSERT (intr_get_level () == INTR_OFF);
   lock_init (&tid_lock);
-  
+
   if (thread_mlfqs) {
     size_t i;
     for (i = 0; i < 64; i++) {
@@ -128,7 +128,7 @@ thread_init (void)
 
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
-  
+
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -141,8 +141,8 @@ thread_start (void)
   struct semaphore idle_started;
   sema_init (&idle_started, 0);
   thread_create ("idle", PRI_MIN, idle, &idle_started);
-  
-  
+
+
   /* Start preemptive thread scheduling. */
   intr_enable ();
 
@@ -157,7 +157,7 @@ thread_start (void)
 void
 thread_tick (void)
 {
-  struct thread *t = thread_current (); 
+  struct thread *t = thread_current ();
   int64_t curr_time = timer_ticks ();
   if (thread_mlfqs) {
     if (t != idle_thread) {
@@ -179,7 +179,7 @@ thread_tick (void)
     }
     // // every tick
     // t->recent_cpu = fix_add(t->recent_cpu, fix_int(1));
-  } 
+  }
 
   if (!list_empty (&sleeping_list)) {
     struct list_elem *e = list_begin(&sleeping_list);
@@ -204,7 +204,7 @@ thread_tick (void)
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
     intr_yield_on_return ();
-  
+
 }
 
 /* Prints thread statistics. */
@@ -269,7 +269,7 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
 
   thread_unblock (t);
-  
+
   if (!thread_mlfqs && thread_effective_priority (thread_current ()) < priority) {
     thread_yield ();
   }
@@ -423,7 +423,7 @@ thread_yield (void)
       // Put back into mlfq
       mlfq_insert(cur);
     }
-  } 
+  }
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -779,7 +779,7 @@ calculate_priority (struct thread* thread) {
   }
 }
 
-void 
+void
 update_recent_cpu_second (void) {
   // struct thread* thread = thread_current();
   // fixed_point_t load_avg_2 = fix_mul(fix_int(2), load_avg);
@@ -806,11 +806,13 @@ update_all_queue (void) {
     struct list_elem *e = list_begin (&mlfq[i]);
     while (e != list_tail (&mlfq[i])) {
       struct thread *t = list_entry (e, struct thread, elem);
+      struct list_elem *next_e = list_next (e);
       t->priority = calculate_priority (t);
       if (t->priority != i) {
         list_remove (&t->elem);
         mlfq_insert (t);
       }
+      e = next_e;
     }
   }
 }
@@ -837,7 +839,7 @@ mlfq_insert (struct thread *thread) {
   ready_threads++;
 }
 
-struct thread* 
+struct thread*
 mlfq_pop (void) {
   int i;
   for (i = 63; i >=0 ; i--) {
