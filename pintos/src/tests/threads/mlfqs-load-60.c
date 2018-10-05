@@ -109,7 +109,7 @@ static int64_t start_time;
 
 static void load_thread (void *aux);
 
-#define THREAD_CNT 60
+#define THREAD_CNT 1
 
 void
 test_mlfqs_load_60 (void)
@@ -150,6 +150,6 @@ load_thread (void *aux UNUSED)
   thread_set_nice (20);
   timer_sleep (sleep_time - timer_elapsed (start_time));
   while (timer_elapsed (start_time) < spin_time)
-    continue;
+    printf("hey\n");
   timer_sleep (exit_time - timer_elapsed (start_time));
 }

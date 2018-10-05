@@ -156,30 +156,7 @@ thread_start (void)
 void
 thread_tick (void)
 {
-  struct thread *t = thread_current ();
-  if (!list_empty (&sleeping_list)) {
-    int64_t curr_time = timer_ticks ();
-    struct list_elem *e = list_begin(&sleeping_list);
-    struct thread *sleeping_head = list_entry (e, struct thread, elem);
-    while (!list_empty (&sleeping_list) && curr_time >= sleeping_head->sleep_until) {
-      list_pop_front (&sleeping_list);
-      thread_unblock (sleeping_head);
-      e = list_begin(&sleeping_list);
-      sleeping_head = list_entry (e, struct thread, elem);
-    }
-  }
-  if (thread_mlfqs) {
-
-    if (timer_ticks() % 4 == 0) { //every 4 ticks
-      t->priority = calculate_priority(t);
-    }
-    if (timer_ticks() % TIMER_FREQ == 0) { //every second
-      update_recent_cpu_second();
-      update_load_avg();
-    }
-    // // every tick
-    t->recent_cpu = fix_add(t->recent_cpu, fix_int(1));
-  }
+  struct thread *t = thread_current ();  
   /* Update statistics. */
   if (t == idle_thread)
     idle_ticks++;
@@ -192,6 +169,55 @@ thread_tick (void)
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
     intr_yield_on_return ();
+  if (!list_empty (&sleeping_list)) {
+    int64_t curr_time = timer_ticks ();
+    struct list_elem *e = list_begin(&sleeping_list);
+    struct thread *sleeping_head = list_entry (e, struct thread, elem);
+    // printf("*******READYLIST\n");
+    // struct list_elem *m = list_begin(&mlfq[63]);
+    // while (m != list_tail(&mlfq[63])) {
+    //   struct thread* mt = list_entry (m, struct thread, elem);
+    //   printf("%s\n", mt->name);
+    //   m  = list_next(m);
+    // }
+    // printf("*******READYLIST\n");
+    // e = list_begin(&sleeping_list);
+    while (!list_empty (&sleeping_list) && curr_time >= sleeping_head->sleep_until) {
+      list_pop_front (&sleeping_list);
+      // printf("CURRENT: %d\n", t->priority);
+      // printf("CURRENT: %s\n", t->name);
+      // printf("WAKING: %s\n", sleeping_head->name);
+      
+
+      thread_unblock (sleeping_head);
+      // printf("WAKING PRIORITY: %i\n", sleeping_head->priority);
+      // printf("*******READYLIST\n");
+      // struct list_elem *m = list_begin(&mlfq[63]);
+      // while (m != list_tail(&mlfq[63])) {
+      //   struct thread* mt = list_entry (m, struct thread, elem);
+      //   printf("%s\n", mt->name);
+      //   m  = list_next(m);
+      // }
+      // printf("*******READYLIST\n");
+      e = list_begin(&sleeping_list);
+      sleeping_head = list_entry (e, struct thread, elem);
+      // printf("NEXT SLEEPER: %s\n", sleeping_head->name);
+
+    }
+  }
+  if (thread_mlfqs) {
+
+    if (timer_ticks() % 4 == 0) { //every 4 ticks
+      if (t != idle_thread)
+        t->priority = calculate_priority(t);
+    }
+    if (timer_ticks() % TIMER_FREQ == 0) { //every second
+      // update_recent_cpu_second();
+      update_load_avg();
+    }
+    // // every tick
+    // t->recent_cpu = fix_add(t->recent_cpu, fix_int(1));
+  }
 }
 
 /* Prints thread statistics. */
@@ -338,7 +364,19 @@ thread_sleep (int64_t wakeup_tick)
   struct thread *current_thread = thread_current ();
   current_thread->sleep_until = wakeup_tick;
   intr_disable ();
+  // printf("SLEEPING: %s\n", current_thread->name);
+  if (thread_mlfqs && current_thread != idle_thread)
+    current_thread->priority = 63;
   list_insert_ordered (&sleeping_list, &(current_thread->elem), sleep_list_compare, NULL);
+  // printf("SLEEPHEAD: %s\n", list_entry(list_begin(&sleeping_list)))
+  // int i;
+  // for (i = 63; i >=0 ; i--) {
+  //   if (!list_empty(&mlfq[i])) {
+  //     break;
+  //   }
+  // }
+  // struct thread * t =  list_entry(list_begin(&mlfq[63]), struct thread, elem);
+  // printf("NEXT: %s\n", t->name);
   thread_block ();
 
 }
@@ -564,11 +602,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->status = THREAD_BLOCKED;
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
-  if (!thread_mlfqs) {
   t->priority = priority;
-  } else {
-    t->priority = calculate_priority(t);
-  }
   list_init (&t->received_donations);
   t->magic = THREAD_MAGIC;
 
