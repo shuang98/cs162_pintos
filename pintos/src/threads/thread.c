@@ -133,12 +133,12 @@ thread_tick (void)
   if (!list_empty (&sleeping_list)) {
     int64_t curr_time = timer_ticks ();
     struct list_elem *e = list_begin(&sleeping_list);
-    struct thread *current_thread = list_entry (e, struct thread, elem);
-    while (!list_empty (&sleeping_list) && curr_time >= current_thread->sleep_until) {
+    struct thread *sleeping_head = list_entry (e, struct thread, elem);
+    while (!list_empty (&sleeping_list) && curr_time >= sleeping_head->sleep_until) {
       list_pop_front (&sleeping_list);
-      thread_unblock (current_thread);
+      thread_unblock (sleeping_head);
       e = list_begin(&sleeping_list);
-      current_thread = list_entry (e, struct thread, elem);
+      sleeping_head = list_entry (e, struct thread, elem);
     }
   }
   /* Update statistics. */
@@ -151,7 +151,7 @@ thread_tick (void)
   else
     kernel_ticks++;
 
-  
+
 
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
@@ -219,7 +219,9 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
-
+  if (thread_effective_priority (thread_current ()) < priority) {
+    thread_yield ();
+  }
   return tid;
 }
 
@@ -256,7 +258,8 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  // list_push_back (&ready_list, &t->elem);
+  list_insert_ordered(&ready_list, &t->elem, priority_insert_desc_compare, NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -295,8 +298,7 @@ thread_sleep (int64_t wakeup_tick)
   current_thread->sleep_until = wakeup_tick;
   // printf("SLEEPING : %s\n", current_thread->name);
   intr_disable ();
-  list_push_back (&sleeping_list, &(current_thread->elem));
-  list_sort(&sleeping_list, sleep_list_compare, NULL);
+  list_insert_ordered (&sleeping_list, &(current_thread->elem), sleep_list_compare, NULL);
   thread_block ();
 }
 
@@ -308,6 +310,14 @@ sleep_list_compare (const struct list_elem *a_, const struct list_elem *b_, void
   const struct thread *a = list_entry (a_, struct thread, elem);
   const struct thread *b = list_entry (b_, struct thread, elem);
   return a->sleep_until < b->sleep_until;
+}
+
+bool
+priority_insert_desc_compare(const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED)
+{
+  struct thread *a  = list_entry (a_, struct thread, elem);
+  struct thread *b = list_entry (b_, struct thread, elem);
+  return thread_effective_priority(a) > thread_effective_priority(b);
 }
 
 /* Returns the running thread's tid. */
@@ -345,12 +355,12 @@ thread_yield (void)
 {
   struct thread *cur = thread_current ();
   enum intr_level old_level;
-
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
   if (cur != idle_thread)
-    list_push_back (&ready_list, &cur->elem);
+    // list_push_back (&ready_list, &cur->elem);
+    list_insert_ordered(&ready_list, &cur->elem, priority_insert_desc_compare, NULL);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -377,14 +387,19 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority)
 {
+  int old_priority = thread_get_priority ();
   thread_current ()->priority = new_priority;
+  if (old_priority > new_priority && list_empty (&thread_current ()->received_donations)) {
+    thread_yield ();
+  }
 }
 
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void)
 {
-  return thread_current ()->priority;
+  // return thread_current ()->priority;
+  return thread_effective_priority (thread_current ());
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -504,6 +519,7 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+  list_init (&t->received_donations);
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
@@ -536,6 +552,8 @@ next_thread_to_run (void)
     return idle_thread;
   else
     return list_entry (list_pop_front (&ready_list), struct thread, elem);
+    // return list_entry (list_max(&ready_list, priority_insert_desc_compare, NULL), struct thread, elem);
+
 }
 
 /* Completes a thread switch by activating the new thread's page
@@ -619,6 +637,48 @@ allocate_tid (void)
   lock_release (&tid_lock);
 
   return tid;
+}
+
+int
+thread_effective_priority (struct thread *selected_thread) {
+  int max = selected_thread->priority;
+  enum intr_level old_intr_lvl = intr_disable ();
+  struct list_elem *e = list_begin (&selected_thread->received_donations);
+  while (e != list_tail(&(selected_thread->received_donations))) {
+    struct donation *current_donation_elem = list_entry(e, struct donation, elem);
+    if (current_donation_elem->donation_priority > max) {
+      max = current_donation_elem->donation_priority;
+    }
+    e = list_next(e);
+  }
+  intr_set_level (old_intr_lvl);
+  return max;
+}
+
+void
+thread_donate (struct thread *donating_thread, struct thread *receiving_thread, struct lock *lock) {
+  // Fill in donation fields
+  (donating_thread->current_donation).lock = lock;
+  (donating_thread->current_donation).donation_priority = thread_effective_priority(donating_thread);
+  (donating_thread->current_donation).donating_thread = donating_thread;
+  (donating_thread->current_donation).receiving_thread = receiving_thread;
+
+  // Check if donation between donating_thread and receiving_thread already exits and updates if necessary
+  struct list_elem *e = list_begin(&receiving_thread->received_donations);
+  bool already_donated = false;
+  while (e != list_tail(&receiving_thread->received_donations)) {
+    if (list_entry(e, struct donation, elem)->donating_thread == donating_thread) {
+      already_donated = true;
+    }
+    e = list_next(e);
+  }
+  // If not already existing add donation to recieving_thread->recieved_donations
+  if (!already_donated) {
+    list_push_back (&receiving_thread->received_donations, &(donating_thread->current_donation).elem);
+  }
+  if (receiving_thread->current_donation.receiving_thread != NULL) {
+    thread_donate(receiving_thread, receiving_thread->current_donation.receiving_thread, receiving_thread->current_donation.lock);
+  }
 }
 
 /* Offset of `stack' member within `struct thread'.

@@ -26,6 +26,15 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
+/* Donation Struct */
+struct donation {
+  struct lock *lock;
+  struct thread* receiving_thread;
+  struct thread* donating_thread;
+  int donation_priority;
+  struct list_elem elem;
+};
+
 /* A kernel thread or user process.
 
    Each thread structure is stored in its own 4 kB page.  The
@@ -98,6 +107,9 @@ struct thread
     /* tick that thread will sleep until */
     int64_t sleep_until;
 
+    struct list received_donations;    	       /* List of all donations to this thread */
+    struct donation current_donation;              /* LIst of all donations from that this thread*/
+
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
@@ -144,5 +156,8 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 void thread_sleep(int64_t sleep_until);
+bool priority_insert_desc_compare(const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED);
+int thread_effective_priority(struct thread*);
+void thread_donate (struct thread *donating_thread, struct thread *receiving_thread, struct lock *lock);
 
 #endif /* threads/thread.h */
