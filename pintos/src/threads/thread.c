@@ -156,7 +156,32 @@ thread_start (void)
 void
 thread_tick (void)
 {
-  struct thread *t = thread_current ();  
+  struct thread *t = thread_current (); 
+  if (!list_empty (&sleeping_list)) {
+    int64_t curr_time = timer_ticks ();
+    struct list_elem *e = list_begin(&sleeping_list);
+    struct thread *sleeping_head = list_entry (e, struct thread, elem);
+    while (!list_empty (&sleeping_list) && curr_time >= sleeping_head->sleep_until) {
+      list_pop_front (&sleeping_list);
+      thread_unblock (sleeping_head);
+      e = list_begin(&sleeping_list);
+      sleeping_head = list_entry (e, struct thread, elem);
+
+    }
+  }
+  if (thread_mlfqs) {
+
+    if (timer_ticks() % 4 == 0) { //every 4 ticks
+      if (t != idle_thread)
+        t->priority = calculate_priority(t);
+    }
+    if (timer_ticks() % TIMER_FREQ == 0) { //every second
+      update_load_avg();
+      // update_recent_cpu_second();
+    }
+    // // every tick
+    // t->recent_cpu = fix_add(t->recent_cpu, fix_int(1));
+  } 
   /* Update statistics. */
   if (t == idle_thread)
     idle_ticks++;
@@ -169,55 +194,7 @@ thread_tick (void)
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
     intr_yield_on_return ();
-  if (!list_empty (&sleeping_list)) {
-    int64_t curr_time = timer_ticks ();
-    struct list_elem *e = list_begin(&sleeping_list);
-    struct thread *sleeping_head = list_entry (e, struct thread, elem);
-    // printf("*******READYLIST\n");
-    // struct list_elem *m = list_begin(&mlfq[63]);
-    // while (m != list_tail(&mlfq[63])) {
-    //   struct thread* mt = list_entry (m, struct thread, elem);
-    //   printf("%s\n", mt->name);
-    //   m  = list_next(m);
-    // }
-    // printf("*******READYLIST\n");
-    // e = list_begin(&sleeping_list);
-    while (!list_empty (&sleeping_list) && curr_time >= sleeping_head->sleep_until) {
-      list_pop_front (&sleeping_list);
-      // printf("CURRENT: %d\n", t->priority);
-      // printf("CURRENT: %s\n", t->name);
-      // printf("WAKING: %s\n", sleeping_head->name);
-      
-
-      thread_unblock (sleeping_head);
-      // printf("WAKING PRIORITY: %i\n", sleeping_head->priority);
-      // printf("*******READYLIST\n");
-      // struct list_elem *m = list_begin(&mlfq[63]);
-      // while (m != list_tail(&mlfq[63])) {
-      //   struct thread* mt = list_entry (m, struct thread, elem);
-      //   printf("%s\n", mt->name);
-      //   m  = list_next(m);
-      // }
-      // printf("*******READYLIST\n");
-      e = list_begin(&sleeping_list);
-      sleeping_head = list_entry (e, struct thread, elem);
-      // printf("NEXT SLEEPER: %s\n", sleeping_head->name);
-
-    }
-  }
-  if (thread_mlfqs) {
-
-    if (timer_ticks() % 4 == 0) { //every 4 ticks
-      if (t != idle_thread)
-        t->priority = calculate_priority(t);
-    }
-    if (timer_ticks() % TIMER_FREQ == 0) { //every second
-      // update_recent_cpu_second();
-      update_load_avg();
-    }
-    // // every tick
-    // t->recent_cpu = fix_add(t->recent_cpu, fix_int(1));
-  }
+  
 }
 
 /* Prints thread statistics. */
@@ -321,7 +298,6 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  // list_push_back (&ready_list, &t->elem);
   if (!thread_mlfqs) {
     list_insert_ordered(&ready_list, &t->elem, priority_insert_desc_compare, NULL);
   } else {
@@ -363,22 +339,12 @@ thread_sleep (int64_t wakeup_tick)
 {
   struct thread *current_thread = thread_current ();
   current_thread->sleep_until = wakeup_tick;
-  intr_disable ();
-  // printf("SLEEPING: %s\n", current_thread->name);
+  enum intr_level old_level = intr_disable ();
   if (thread_mlfqs && current_thread != idle_thread)
     current_thread->priority = 63;
   list_insert_ordered (&sleeping_list, &(current_thread->elem), sleep_list_compare, NULL);
-  // printf("SLEEPHEAD: %s\n", list_entry(list_begin(&sleeping_list)))
-  // int i;
-  // for (i = 63; i >=0 ; i--) {
-  //   if (!list_empty(&mlfq[i])) {
-  //     break;
-  //   }
-  // }
-  // struct thread * t =  list_entry(list_begin(&mlfq[63]), struct thread, elem);
-  // printf("NEXT: %s\n", t->name);
   thread_block ();
-
+  intr_set_level (old_level);
 }
 
 /* returns true if a's sleep_until is < b's sleep_until, false otherwise
@@ -637,7 +603,6 @@ next_thread_to_run (void)
       return idle_thread;
     else
       return list_entry (list_pop_front (&ready_list), struct thread, elem);
-      // return list_entry (list_max(&ready_list, priority_insert_desc_compare, NULL), struct thread, elem);
   } else {
     //  Pop from mlfqs queue!
     return mlfq_pop();
