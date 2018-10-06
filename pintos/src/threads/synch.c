@@ -244,7 +244,7 @@ lock_release (struct lock *lock)
       struct list_elem *next = list_next(e);
       if (lock == list_entry(e, struct donation, elem)->lock){
         list_remove(e);
-      } 
+      }
       e = next;
     }
   }
