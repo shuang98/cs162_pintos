@@ -247,7 +247,7 @@ thread_create (const char *name, int priority,
     return TID_ERROR;
 
   /* Initialize thread. */
-  init_thread (t, name, priority, thread_current ()->nice, thread_current ()->recent_cpu);
+  init_thread (t, name, priority, thread_current ()->nice, fix_int (0));
   tid = t->tid = allocate_tid ();
 
   /* Stack frame for kernel_thread(). */
