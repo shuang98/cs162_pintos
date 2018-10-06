@@ -71,7 +71,6 @@ sema_down (struct semaphore *sema)
   while (sema->value == 0)
     {
       list_push_back (&sema->waiters, &thread_current ()->elem);
-      // list_insert_ordered (&sema->waiters, &thread_current ()->elem, priority_insert_desc_compare, NULL);
       thread_block ();
     }
   sema->value--;
@@ -201,6 +200,7 @@ lock_acquire (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
+  
   if (!thread_mlfqs && lock->holder && thread_get_priority () > thread_effective_priority (lock->holder)) {
     thread_donate (thread_current (), lock->holder, lock);
   }
@@ -238,6 +238,7 @@ lock_release (struct lock *lock)
 {
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
+
   if (!thread_mlfqs) {
     struct list_elem *e = list_begin (&thread_current ()->received_donations);
     while (e != list_tail (&thread_current ()->received_donations)) {
@@ -313,7 +314,6 @@ cond_wait (struct condition *cond, struct lock *lock)
 
   sema_init (&waiter.semaphore, 0);
   list_push_back (&cond->waiters, &waiter.elem);
-  // list_insert_ordered (&cond->waiters, &waiter.elem, priority_insert_desc_compare, NULL);
   lock_release (lock);
   sema_down (&waiter.semaphore);
   lock_acquire (lock);

@@ -111,7 +111,7 @@ thread_init (void)
 
   if (thread_mlfqs) {
     size_t i;
-    for (i = 0; i < 64; i++) 
+    for (i = 0; i < 64; i++)
       {
         list_init (&mlfq[i]);
       }
@@ -182,6 +182,7 @@ thread_tick (void)
 
     }
   }
+
   /* Update statistics. */
   if (t == idle_thread)
     idle_ticks++;
@@ -765,7 +766,7 @@ calculate_priority (struct thread* thread) {
 void
 update_recent_cpu_second (void) {
   struct list_elem *e = list_begin (&all_list);
-  while (e != list_tail (&all_list)) 
+  while (e != list_tail (&all_list))
     {
       struct thread *cur_thread = list_entry (e, struct thread, allelem);
       fixed_point_t load_avg_2 = fix_mul (fix_int (2), load_avg);
@@ -780,10 +781,10 @@ update_recent_cpu_second (void) {
 void
 update_all_queue (void) {
   int i;
-  for (i = 0; i < 64; i += 1) 
+  for (i = 0; i < 64; i += 1)
     {
       struct list_elem *e = list_begin (&mlfq[i]);
-      while (e != list_tail (&mlfq[i])) 
+      while (e != list_tail (&mlfq[i]))
         {
           struct thread *t = list_entry (e, struct thread, elem);
           struct list_elem *next_e = list_next (e);
@@ -813,7 +814,7 @@ update_load_avg (void) {
     ready_threads = 1;
   }
   int i;
-  for (i = 0; i < 64; i += 1) 
+  for (i = 0; i < 64; i += 1)
     {
       if (!list_empty (&mlfq[i])) {
         ready_threads += list_size (&mlfq[i]);
@@ -834,7 +835,7 @@ mlfq_insert (struct thread *thread) {
 struct thread*
 mlfq_pop (void) {
   int i;
-  for (i = 63; i >=0 ; i--) 
+  for (i = 63; i >=0 ; i--)
     {
       if (!list_empty(&mlfq[i])) {
         break;
@@ -845,8 +846,6 @@ mlfq_pop (void) {
   }
   return list_entry (list_pop_front (&mlfq[i]), struct thread, elem);
 }
-
-
 
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
