@@ -110,6 +110,9 @@ struct thread
     struct list received_donations;    	       /* List of all donations to this thread */
     struct donation current_donation;              /* LIst of all donations from that this thread*/
 
+    int nice;                             /* Niceness value. */
+    fixed_point_t recent_cpu;              /* Recent cpu usage value. */
+
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
