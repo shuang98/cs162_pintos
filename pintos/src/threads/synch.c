@@ -123,9 +123,7 @@ sema_up (struct semaphore *sema)
   }
   sema->value++;
   intr_set_level (old_level);
-  if (!thread_mlfqs) {
-    thread_yield();
-  }
+  thread_yield();
 }
 
 static void sema_test_helper (void *sema_);
@@ -246,7 +244,7 @@ lock_release (struct lock *lock)
       struct list_elem *next = list_next(e);
       if (lock == list_entry(e, struct donation, elem)->lock){
         list_remove(e);
-      } 
+      }
       e = next;
     }
   }
