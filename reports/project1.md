@@ -6,22 +6,37 @@ Code Alterations
 
 Since the initial design doc, the only changes made were optimizations suggested in the design doc review session with Jason:
 
-  * __Part 1__: We switched our implementation to disable all interrupts rather than use locks for timer interrupts in order to avoid the timer interrupt case from being blocked, an edge case we didn't consider before the review.
-  * __Part 2__: We made a few changes, the biggest being our donated_from and donated_to objects being single elements instead of lists, minimizing the space used to represent the information for priority donations. Similarly, we got rid of semaphores for syncs because when we acquire a lock we are already syncing, meaning that the act of using semaphores becomes redundant.
-  * __Part 3__: Our implementation was mostly optimal by our considerations so no ideas were changed.
+  __Part 1__: We switched our implementation to disable all interrupts rather than use locks for timer interrupts in order to avoid the timer interrupt case from being blocked, an edge case we didn't consider before the review. 
+
+  __Part 2__: We made a few changes, the biggest being our `donated_to` field in the `thread` struct was changed to a single `donation` struct. Previously, `donated_to` had been a list of `donation` structs; however, we learned in our design review that only keeping track of a single `donation` is necessary. 
+  Our changes as follows 
+  (certain fields have been renamed for clarity `donated_to` -> `current_donation` and `donations` -> `received_donations`):
+  ```c
+  struct thread
+    {
+      //...
+      struct list received_donations;    	       /* List of all donations to this thread */
+      struct donation current_donation;              /* Current donation that came from this thread */
+      //...
+    }
+  ```
+  With this change of `struct thread`, we made the appriopriate changes to our donation algorithm as well. Specifically, having `struct thread* A` donate to `struct thread* B` is simplified where only `A->current_donation` gets updated, and a pointer to `A->current_donation` gets added to `B->received_donations` if not already there.
+
+  __Part 3__: For part 3, we implemented a more improved algorithm for updating thread priorites and locations within the 64 queues. Previously, we decided on using two seperate passes on the queue one for updating priority and the next for moving threads if necessary. However, found a way to do it in one pass:
+  * Since calling `void thread_set_nice (int nice)` triggers the current thread to update its priority and place in queue on its own our update to `thread_currnt()->priority` every 4 ticks will always be decreasing the priority (as the only time a thread's priority increases is when it sets its own niceness). 
+  * Thus, anytime a thread needs to be moved to a different priority level queue, it will always be moving down.
+  * Therefore, if we iterate through the queue _from bottom to top (0->64)_, we can update priority and and then placement for each thread without any recalculations; i.e we will never encounter the same thread while iterating.
+
+  Other than this change, our methods remained the same.
 
 Group Reflection
 ----------------
+Work Distribution
+  * Eric Li: Part1, Part3, Design Doc Pt3
+  * Stanley Huang: Part1, Part2, Part3, Design Doc Pt1 $ 2
+  * Kevin Liu: Part1, Part3, Design Doc Pt2
+  * Ayush Maganahalli: Design Doc Ques.
 
-The group worked together as a whole for most of the project. Most of the members did have specific sections they specialized in (i.e. worked on more and are more comfortable with explaining) but the group as a whole worked together to complete most parts. This entailed ideation, conceptualization, coding the initial code, debugging, and cleaning up the code. The specific sections covered by members were (i.e. most of the initial coding): Part 1 by Stanley Huang and Ayush Maganahalli, Part 2 by Stanley Huang, and Part 3 by Eric Li and Kevin Liu. We think this was a good way to handle the coding because it let the code be written by only a few members who knew exactly what their team was thinking but let the others also contribute via debugging and so that they could understand what was occurring as well.
+**What went well**: Our initial design document was pretty well thought out and required only a few changes, so implementation was relatively straightforward. Most of coding time was spent debugging.
 
-Code Style
-----------
-
-In terms of safety, our code doesn't exhibit any unsafe methods. We included many ASSERT statements in order to ensure that the precondition before any potential calls followed the appropriate behavior. As a result, we could guarantee that the expected output should fall within an expected range of values/outputs. There weren't many memory issues we had to deal with as a whole but most of them.
-
-The coding style was consistent across each file and blends in well with the Pintos code. It helps significantly that the code written only required a few lines, so it was easy to minimize how much code we had to write and stay close to the Pintos style. As a result, our code for many functions (e.g. the sleep/delay functions or the try vs do functions for semaphores and locks) ended up being similar and easy to work with for Pintos code. This allowed us to create reusable functions instead of duplicating code as well since we distilled the code to only what we needed, meaning we couldn't reuse code for each function.
-
-Similar to the answer before, because our code is minimalistic and replicated relatively often, it is easy to understand. One can go through it and understand what each function does in relation to others, while also understanding the differences based on the change in numeric values or other attributes. The documentation (comments) is also helpful in explaining what the difference is for each edited function.
-
-As a result, if our code did become more complicated we used comments to help document and explain the function of each function, without leaving commented-out code. Similarly, other etiquette like not committing binary files or using excessively long lines were followed as well.
+**What could be improved**: We could have improved certain aspects of collaboration, like distribution of work. We also encoutered some git problems that set us back a few times.
