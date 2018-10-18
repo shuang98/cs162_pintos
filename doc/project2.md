@@ -3,10 +3,10 @@ Design Document for Project 2: User Programs
 
 ## Group Members
 
-* FirstName LastName <email@domain.example>
-* FirstName LastName <email@domain.example>
+* Stanley Huang <shuang1998@berkeley.edu>
+* Kevin Liu <kevinliu36@berkeley.edu>
 * Eric Li <eric.li5009@berkeley.edu>
-* FirstName LastName <email@domain.example>
+* Ayush Maganahalli <ayush.sm@berkeley.edu>
 
 # Task 1:  Argument Passing
 ## Data structures and functions
