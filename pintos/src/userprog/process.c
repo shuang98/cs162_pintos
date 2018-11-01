@@ -41,8 +41,13 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
+  char file_copy[strlen (file_name) + 1];
+  strlcpy (file_copy, file_name, strlen (file_name) + 1);
+  char *name, *save_ptr;
+  name = strtok_r (file_copy, " ", &save_ptr);
+
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy);
   return tid;
@@ -57,12 +62,54 @@ start_process (void *file_name_)
   struct intr_frame if_;
   bool success;
 
+  int argc = 0;
+  char file_copy[strlen (file_name) + 1];
+  strlcpy (file_copy, file_name, strlen (file_name) + 1);
+  char *file_token, *save_ptr;
+  for (file_token = strtok_r (file_copy, " ", &save_ptr); file_token != NULL;
+      file_token = strtok_r (NULL, " ", &save_ptr)) {
+    argc++;
+  }
+  char *argv[argc];
+  int count = 0;
+  for (file_token = strtok_r (file_name, " ", &save_ptr); file_token != NULL;
+      file_token = strtok_r (NULL, " ", &save_ptr)) {
+    argv[count] = file_token;
+    count++;
+  }
+
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+  success = load (argv[0], &if_.eip, &if_.esp);
+
+  void **esp = &if_.esp;
+  void *argv_addr[argc];
+  int i;
+  for (i = 0; i < argc; i++) {
+    *esp -= strlen (argv[i]) + 1;
+    strlcpy (*esp, argv[i], strlen (argv[i]) + 1);
+    argv_addr[i] = *esp;
+  }
+  int offset = 4 - ((unsigned int)*esp % 4);
+  *esp -= offset;
+  memset (*esp, 0, offset);
+  for (i = argc; i >= 0; i--) {
+    *esp -= sizeof (void *);
+    if (i == argc) {
+      memset (*esp, 0, sizeof (void *));
+    } else {
+      memcpy (*esp, &argv_addr[i], sizeof (void *));
+    }
+  }
+  void *argv_loc = *esp;
+  *esp -= sizeof (void *);
+  memcpy (*esp, &argv_loc, sizeof (void *));
+  *esp -= sizeof (int);
+  memcpy (*esp, &argc, sizeof (int));
+  *esp -= sizeof (void *);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -467,4 +514,12 @@ install_page (void *upage, void *kpage, bool writable)
      address, then map our page there. */
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
+}
+
+int write (int fd, void *buffer, unsigned size) {
+  if (fd == 1) {
+    putbuf (buffer, size);
+    return size;
+  }
+  return 0;
 }
