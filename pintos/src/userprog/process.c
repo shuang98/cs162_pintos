@@ -97,22 +97,27 @@ start_process (void *file_name_)
     void **esp = &if_.esp;
     void *argv_addr[argc];
     int i;
-    for (i = 0; i < argc; i++) {
-      *esp -= strlen (argv[i]) + 1;
-      strlcpy (*esp, argv[i], strlen (argv[i]) + 1);
-      argv_addr[i] = *esp;
-    }
+    for (i = 0; i < argc; i++)
+      {
+        *esp -= strlen (argv[i]) + 1;
+        strlcpy (*esp, argv[i], strlen (argv[i]) + 1);
+        argv_addr[i] = *esp;
+      }
     int offset = 4 - ((unsigned int)*esp % 4);
     *esp -= offset;
     memset (*esp, 0, offset);
-    for (i = argc; i >= 0; i--) {
-      *esp -= sizeof (void *);
-      if (i == argc) {
-        memset (*esp, 0, sizeof (void *));
-      } else {
-        memcpy (*esp, &argv_addr[i], sizeof (void *));
+    for (i = argc; i >= 0; i--)
+      {
+        *esp -= sizeof (void *);
+        if (i == argc)
+          {
+            memset (*esp, 0, sizeof (void *));
+          }
+        else
+          {
+            memcpy (*esp, &argv_addr[i], sizeof (void *));
+          }
       }
-    }
     void *argv_loc = *esp;
     *esp -= sizeof (void *);
     memcpy (*esp, &argv_loc, sizeof (void *));
