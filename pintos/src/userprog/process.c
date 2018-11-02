@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "threads/malloc.h"
+#include "devices/input.h"
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
 #include "userprog/tss.h"
@@ -22,6 +24,7 @@
 static struct semaphore temporary;
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+bool fd_compare (const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -67,16 +70,16 @@ start_process (void *file_name_)
   strlcpy (file_copy, file_name, strlen (file_name) + 1);
   char *file_token, *save_ptr;
   for (file_token = strtok_r (file_copy, " ", &save_ptr); file_token != NULL;
-      file_token = strtok_r (NULL, " ", &save_ptr)) {
-    argc++;
-  }
+      file_token = strtok_r (NULL, " ", &save_ptr))
+      argc++;
   char *argv[argc];
   int count = 0;
   for (file_token = strtok_r (file_name, " ", &save_ptr); file_token != NULL;
-      file_token = strtok_r (NULL, " ", &save_ptr)) {
-    argv[count] = file_token;
-    count++;
-  }
+      file_token = strtok_r (NULL, " ", &save_ptr))
+    {
+      argv[count] = file_token;
+      count++;
+    }
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -88,22 +91,27 @@ start_process (void *file_name_)
   void **esp = &if_.esp;
   void *argv_addr[argc];
   int i;
-  for (i = 0; i < argc; i++) {
-    *esp -= strlen (argv[i]) + 1;
-    strlcpy (*esp, argv[i], strlen (argv[i]) + 1);
-    argv_addr[i] = *esp;
-  }
+  for (i = 0; i < argc; i++)
+    {
+      *esp -= strlen (argv[i]) + 1;
+      strlcpy (*esp, argv[i], strlen (argv[i]) + 1);
+      argv_addr[i] = *esp;
+    }
   int offset = 4 - ((unsigned int)*esp % 4);
   *esp -= offset;
   memset (*esp, 0, offset);
-  for (i = argc; i >= 0; i--) {
-    *esp -= sizeof (void *);
-    if (i == argc) {
-      memset (*esp, 0, sizeof (void *));
-    } else {
-      memcpy (*esp, &argv_addr[i], sizeof (void *));
+  for (i = argc; i >= 0; i--)
+    {
+      *esp -= sizeof (void *);
+      if (i == argc)
+        {
+          memset (*esp, 0, sizeof (void *));
+        }
+      else
+        {
+          memcpy (*esp, &argv_addr[i], sizeof (void *));
+        }
     }
-  }
   void *argv_loc = *esp;
   *esp -= sizeof (void *);
   memcpy (*esp, &argv_loc, sizeof (void *));
@@ -280,6 +288,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
       printf ("load: %s: open failed\n", file_name);
       goto done;
     }
+  file_deny_write (file);
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -364,7 +373,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
  done:
   /* We arrive here whether the load is successful or not. */
-  file_close (file);
   return success;
 }
 
@@ -516,10 +524,189 @@ install_page (void *upage, void *kpage, bool writable)
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
 
-int write (int fd, void *buffer, unsigned size) {
-  if (fd == 1) {
-    putbuf (buffer, size);
-    return size;
-  }
+bool
+create (const char *file, unsigned initial_size)
+{
+  return filesys_create (file, initial_size);
+}
+
+bool
+remove (const char *file)
+{
+  return filesys_remove (file);
+}
+
+int
+open (const char *file)
+{
+  struct file *open_file = filesys_open (file);
+  if (open_file == NULL)
+    return -1;
+  struct file *file_in_mem = (struct file *)malloc (sizeof (struct file));
+  memcpy (file_in_mem, open_file, sizeof (struct file));
+
+  struct fd_elem *file_node = (struct fd_elem *)malloc (sizeof (struct fd_elem));
+  file_node->fd = 0;
+  file_node->file_ptr = file_in_mem;
+
+  struct list_elem *e;
+  struct thread *curr_thread = thread_current ();
+  int count = 2;
+  for (e = list_begin (curr_thread->fd_root); e != list_end (curr_thread->fd_root); e = list_next (e))
+    {
+      struct fd_elem *f = list_entry (e, struct fd_elem, table_elem);
+      if (f->fd != count)
+        {
+          file_node->fd = count;
+          break;
+        }
+      count++;
+    }
+  if (file_node->fd < 2)
+    {
+      file_node->fd = count;
+    }
+  list_insert_ordered (curr_thread->fd_root, &file_node->table_elem, fd_compare, NULL);
+  return file_node->fd;
+}
+
+int
+filesize (int fd)
+{
+  struct list_elem *e;
+  struct thread *curr_thread = thread_current ();
+  for (e = list_begin (curr_thread->fd_root); e != list_end (curr_thread->fd_root); e = list_next (e))
+    {
+      struct fd_elem *f = list_entry (e, struct fd_elem, table_elem);
+      if (f->fd == fd)
+        {
+          struct file *file = f->file_ptr;
+          return file_length (file);
+        }
+    }
+  return -1;
+}
+
+int
+read (int fd, void *buffer, unsigned size)
+{
+  if (fd == 0)
+    {
+      unsigned i;
+      for (i = 0; i < size; i += 1)
+        {
+          ((char *) buffer)[i] = input_getc ();
+        }
+    }
+  else
+    {
+      struct thread *curr_thread = thread_current ();
+      struct list_elem *e;
+      for (e = list_begin (curr_thread->fd_root); e != list_end (curr_thread->fd_root);
+            e = list_next (e))
+          {
+            struct fd_elem *curr_elem = list_entry (e, struct fd_elem, table_elem);
+            if (curr_elem->fd != fd)
+              {
+                continue;
+              }
+            else
+              {
+                // fd exists and we found it
+                off_t bytes_read = file_read (curr_elem->file_ptr, buffer, (off_t) size);
+                return bytes_read;
+              }
+          }
+    }
+    return -1;
+}
+
+int
+write (int fd, void *buffer, unsigned size)
+{
+  if (fd == 1)
+    {
+      putbuf (buffer, size);
+      return size;
+    }
+  else
+    {
+      struct thread *current_thread = thread_current ();
+      struct list_elem *e;
+      for (e = list_begin (current_thread->fd_root); e != list_end (current_thread->fd_root);
+            e = list_next (e))
+          {
+            struct fd_elem *curr_fd_elem = list_entry (e, struct fd_elem, table_elem);
+            if (curr_fd_elem->fd != fd)
+              {
+                continue;
+              }
+            else
+              // found fd
+              {
+                off_t bytes_written = file_write (curr_fd_elem->file_ptr, buffer, size);
+                return (int) bytes_written;
+              }
+          }
+      // fd does not exist in list
+      return -1;
+    }
+}
+
+void
+seek (int fd, unsigned position)
+{
+  struct list_elem *e;
+  struct thread *curr_thread = thread_current ();
+  for (e = list_begin (curr_thread->fd_root); e != list_end (curr_thread->fd_root); e = list_next (e))
+    {
+      struct fd_elem *f = list_entry (e, struct fd_elem, table_elem);
+      if (f->fd == fd)
+        {
+          struct file *file = f->file_ptr;
+          file_seek (file, position);
+        }
+    }
+}
+
+unsigned
+tell (int fd)
+{
+  struct list_elem *e;
+  struct thread *curr_thread = thread_current ();
+  for (e = list_begin (curr_thread->fd_root); e != list_end (curr_thread->fd_root); e = list_next (e))
+    {
+      struct fd_elem *f = list_entry (e, struct fd_elem, table_elem);
+      if (f->fd == fd) {
+        struct file *file = f->file_ptr;
+        return file_tell (file);
+      }
+    }
   return 0;
+}
+
+void
+close (int fd)
+{
+  struct list_elem *e;
+  struct thread *curr_thread = thread_current ();
+  for (e = list_begin (curr_thread->fd_root); e != list_end (curr_thread->fd_root); e = list_next (e))
+    {
+      struct fd_elem *f = list_entry (e, struct fd_elem, table_elem);
+      if (f->fd == fd)
+        {
+          free (f->file_ptr);
+          list_remove (&f->table_elem);
+          free (f);
+          break;
+        }
+    }
+}
+
+bool
+fd_compare (const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED)
+{
+  struct fd_elem *a = list_entry (a_, struct fd_elem, table_elem);
+  struct fd_elem *b = list_entry (b_, struct fd_elem, table_elem);
+  return a->fd < b->fd;
 }

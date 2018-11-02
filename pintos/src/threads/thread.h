@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include <stdio.h>
 #include "threads/synch.h"
 #include "threads/fixed-point.h"
 
@@ -99,11 +100,18 @@ struct thread
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
 #endif
-
+    struct list *fd_root;
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
 
+struct fd_elem 
+  {
+    int fd;
+    struct file *file_ptr;
+    struct list_elem table_elem;
+  };
+  
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */

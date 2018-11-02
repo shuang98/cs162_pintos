@@ -2,8 +2,8 @@
 #include <debug.h>
 #include <stddef.h>
 #include <random.h>
-#include <stdio.h>
 #include <string.h>
+#include <list.h>
 #include "threads/flags.h"
 #include "threads/interrupt.h"
 #include "threads/intr-stubs.h"
@@ -183,6 +183,11 @@ thread_create (const char *name, int priority,
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
 
+  /* Initialize fd_table */
+  struct list *table_root = (struct list *) malloc(sizeof(struct list));
+  list_init (table_root);
+  t->fd_root = table_root;
+
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
   kf->eip = NULL;
@@ -293,6 +298,21 @@ thread_exit (void)
   list_remove (&thread_current()->allelem);
   thread_current ()->status = THREAD_DYING;
   schedule ();
+  struct thread *curr_thread = thread_current ();
+  struct list_elem *e;
+  int fds[list_size (curr_thread->fd_root)];
+  int counter = 0;
+  for (e = list_begin (curr_thread->fd_root); e != list_end (curr_thread->fd_root); e = list_next (e))
+    {
+      struct fd_elem *curr_elem = list_entry (e, struct fd_elem, table_elem);
+      fds[counter] = curr_elem->fd;
+      counter++;      
+    }
+  int i;
+  for (i = 0; counter < counter; i += 1)
+    {
+      close (fds[i]);
+    }
   NOT_REACHED ();
 }
 
