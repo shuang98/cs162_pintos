@@ -29,9 +29,10 @@ typedef int tid_t;
 // wait status
 struct wait_status {
   int child_id;
+  int parent_id;
   struct semaphore wait_semaphore;
   struct semaphore load_semaphore;
-  int successfully_loaded;
+  bool successfully_loaded;
   int exit_code;
   int child_counter;
   struct lock counter_lock;
@@ -116,7 +117,8 @@ struct thread
     uint32_t *pagedir;                  /* Page directory. */
 // #endif
     struct list child_waits;
-    struct wait_status parent_wait;
+    struct wait_status* parent_wait;
+    
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */

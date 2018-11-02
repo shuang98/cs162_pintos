@@ -72,31 +72,6 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
-
-// init a wait status struct
-void wait_status_init (struct wait_status* wait_status, int child_id) {
-  sema_init(&wait_status->wait_semaphore, 0);
-  sema_init(&wait_status->load_semaphore, 0);
-  lock_init(&wait_status->counter_lock);
-  cond_init(&wait_status->cond);
-  wait_status->child_id = child_id;
-  wait_status->successfully_loaded = 0;
-}
-
-// struct wait_status*
-// wait_status_by_child_id(int child_id, struct list* wait_statuses) {
-//   struct wait_status* w;
-//   struct list_elem* e = list_front(wait_statuses);
-//   while (e != list_tail(&all_list)) {
-//     w = list_entry(e, struct wait_status, elem);
-//     if (w->child_id == child_id) {
-//       return w;
-//     }
-//     e = list_next(e);
-//   }
-//   return NULL;
-// }
-
 struct thread*
 thread_by_id(int tid) {
   enum intr_level old = intr_disable();
@@ -227,8 +202,6 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
-  // init wait_status
-  wait_status_init(&t->parent_wait, tid);
 
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
@@ -510,6 +483,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
   list_init(&t->child_waits);
+
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);

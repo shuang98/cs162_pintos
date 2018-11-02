@@ -17,7 +17,7 @@ syscall_init (void)
 
 static bool
 is_valid_pointer (void* ptr) {
-  return is_user_vaddr(ptr) && pagedir_get_page (thread_current()->pagedir, ptr);
+  return is_user_vaddr(ptr + 3) && pagedir_get_page (thread_current()->pagedir, ptr);
 }
 static void
 invalid_access (struct intr_frame *f UNUSED) {
@@ -30,12 +30,12 @@ static void
 syscall_handler (struct intr_frame *f UNUSED)
 {
   uint32_t* args = ((uint32_t*) f->esp);
-  // printf("System call number: %d\n", args[0]);
+  // printf("System call number: %i\n", is_valid_pointerargs[1]);
   if (is_valid_pointer(f->esp) && is_valid_pointer(args + 4)) {
     if (args[0] == SYS_EXIT) {
       enum intr_level old = intr_disable();
       f->eax = args[1];
-      thread_current()->parent_wait.exit_code = args[1];
+      thread_current()->parent_wait->exit_code = args[1];
       printf("%s: exit(%d)\n", &thread_current ()->name, args[1]);
       thread_exit ();
       intr_set_level(old);
@@ -48,16 +48,24 @@ syscall_handler (struct intr_frame *f UNUSED)
     } else if (args[0] == SYS_PRACTICE) {
       f->eax = args[1] + 1;
     } else if (args[0] == SYS_WAIT) {
-      enum intr_level old = intr_disable();
       f->eax = process_wait(args[1]);
-      intr_set_level(old);
     } else if (args[0] == SYS_EXEC) {
+      
       enum intr_level old = intr_disable();
       int child_id = process_execute((char*) args[1]);
       struct thread* child = thread_by_id(child_id);
       intr_set_level(old);
-      sema_down(&child->parent_wait.load_semaphore);
-      if (!child->parent_wait.successfully_loaded) {
+      sema_down(&child->parent_wait->load_semaphore);
+      struct wait_status* w;
+      struct list_elem* e = list_front(&thread_current()->child_waits);
+      while (e != list_tail(&thread_current()->child_waits)) {
+        w = list_entry(e, struct wait_status, elem);
+        if (w->child_id == child_id) {
+          break;
+        }
+        e = list_next(e);
+      }
+      if (!w->successfully_loaded) {
         f->eax = -1;
       } else {
         f->eax = child_id;
