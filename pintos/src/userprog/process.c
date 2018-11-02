@@ -113,8 +113,14 @@ start_process (void *file_name_)
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
-  if (!success)
+  if (!success) {
+    // sema_up(&thread_current()->parent_wait->load_semaphore);
     thread_exit ();
+  } else {
+    // this wait status should be initialized
+    thread_current()->parent_wait.successfully_loaded = 1;
+    sema_up(&thread_current()->parent_wait.load_semaphore);
+  }
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -136,10 +142,12 @@ start_process (void *file_name_)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED)
+process_wait (tid_t child_tid)
 {
-  sema_down (&temporary);
-  return 0;
+  struct thread* child = thread_by_id(child_tid);
+  list_push_back(&thread_current()->child_waits, &child->parent_wait.elem);
+  sema_down (&child->parent_wait.wait_semaphore);
+  return child->parent_wait.exit_code;
 }
 
 /* Free the current process's resources. */
@@ -165,7 +173,10 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
-  sema_up (&temporary);
+  if (cur->parent_wait.elem.next && cur->parent_wait.elem.prev) {
+    list_remove(&thread_current()->parent_wait.elem);
+  }
+  sema_up (&thread_current()->parent_wait.wait_semaphore);
 }
 
 /* Sets up the CPU for running user code in the current

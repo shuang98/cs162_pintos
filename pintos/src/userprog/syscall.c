@@ -33,9 +33,12 @@ syscall_handler (struct intr_frame *f UNUSED)
   // printf("System call number: %d\n", args[0]);
   if (is_valid_pointer(f->esp) && is_valid_pointer(args + 4)) {
     if (args[0] == SYS_EXIT) {
+      enum intr_level old = intr_disable();
       f->eax = args[1];
+      thread_current()->parent_wait.exit_code = args[1];
       printf("%s: exit(%d)\n", &thread_current ()->name, args[1]);
       thread_exit ();
+      intr_set_level(old);
     } else if (args[0] == SYS_WRITE) {
       int fd = args[1];
       // probably need to check args for this call too.
@@ -45,8 +48,20 @@ syscall_handler (struct intr_frame *f UNUSED)
     } else if (args[0] == SYS_PRACTICE) {
       f->eax = args[1] + 1;
     } else if (args[0] == SYS_WAIT) {
-      
+      enum intr_level old = intr_disable();
+      f->eax = process_wait(args[1]);
+      intr_set_level(old);
     } else if (args[0] == SYS_EXEC) {
+      enum intr_level old = intr_disable();
+      int child_id = process_execute((char*) args[1]);
+      struct thread* child = thread_by_id(child_id);
+      intr_set_level(old);
+      sema_down(&child->parent_wait.load_semaphore);
+      if (!child->parent_wait.successfully_loaded) {
+        f->eax = -1;
+      } else {
+        f->eax = child_id;
+      }
     }
   } else {
     invalid_access (f);
