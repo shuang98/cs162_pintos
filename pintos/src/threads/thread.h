@@ -27,6 +27,23 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
+// wait status
+struct wait_status {
+  int child_id;
+  int parent_id;
+  struct semaphore wait_semaphore;
+  struct semaphore load_semaphore;
+  bool successfully_loaded;
+  int exit_code;
+  int child_counter;
+  struct lock counter_lock;
+  struct condition cond;
+  struct list_elem elem;
+};
+
+void wait_status_init (struct wait_status* wait_status, int child_id);
+struct wait_status* wait_status_by_child_id(int child_id, struct list* wait_statuses);
+
 /* A kernel thread or user process.
 
    Each thread structure is stored in its own 4 kB page.  The
@@ -96,10 +113,15 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
-#ifdef USERPROG
+// #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
-#endif
+// #endif
+    struct list child_waits;
+    struct wait_status* parent_wait;
+    
+
+// #endif
     struct list *fd_root;
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
@@ -116,6 +138,8 @@ struct fd_elem
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
+
+struct thread* thread_by_id(int tid);
 
 void thread_init (void);
 void thread_start (void);

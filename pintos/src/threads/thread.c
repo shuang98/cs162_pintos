@@ -2,6 +2,8 @@
 #include <debug.h>
 #include <stddef.h>
 #include <random.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <list.h>
 #include "threads/flags.h"
@@ -70,6 +72,25 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
+
+struct thread*
+thread_by_id(int tid) {
+  enum intr_level old = intr_disable();
+  struct thread* t;
+  struct list_elem* e = list_front(&all_list);
+  while (e != list_tail(&all_list)) {
+    t = list_entry(e, struct thread, allelem);
+    if (t->tid == tid) {
+      intr_set_level(old);
+      return t;
+    }
+    e = list_next(e);
+  }
+  intr_set_level(old);
+  return NULL;
+
+}
+
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -205,7 +226,6 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
-
   return tid;
 }
 
@@ -483,6 +503,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+  list_init(&t->child_waits);
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);

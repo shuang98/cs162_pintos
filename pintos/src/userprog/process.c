@@ -51,6 +51,15 @@ process_execute (const char *file_name)
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (name, PRI_DEFAULT, start_process, fn_copy);
+  struct thread* child = thread_by_id(tid);
+  child->parent_wait = malloc(sizeof(struct wait_status));
+  sema_init(&child->parent_wait->wait_semaphore, 0);
+  sema_init(&child->parent_wait->load_semaphore, 0);
+  lock_init(&child->parent_wait->counter_lock);
+  cond_init(&child->parent_wait->cond);
+  child->parent_wait->child_id = tid;
+  child->parent_wait->parent_id = thread_current()->tid;
+  child->parent_wait->successfully_loaded = 0;
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy);
   return tid;
@@ -81,46 +90,49 @@ start_process (void *file_name_)
       count++;
     }
 
-  /* Initialize interrupt frame and load executable. */
-  memset (&if_, 0, sizeof if_);
-  if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
-  if_.cs = SEL_UCSEG;
-  if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (argv[0], &if_.eip, &if_.esp);
-
-  void **esp = &if_.esp;
-  void *argv_addr[argc];
-  int i;
-  for (i = 0; i < argc; i++)
-    {
-      *esp -= strlen (argv[i]) + 1;
-      strlcpy (*esp, argv[i], strlen (argv[i]) + 1);
-      argv_addr[i] = *esp;
-    }
-  int offset = 4 - ((unsigned int)*esp % 4);
-  *esp -= offset;
-  memset (*esp, 0, offset);
-  for (i = argc; i >= 0; i--)
-    {
-      *esp -= sizeof (void *);
-      if (i == argc)
-        {
-          memset (*esp, 0, sizeof (void *));
-        }
-      else
-        {
-          memcpy (*esp, &argv_addr[i], sizeof (void *));
-        }
-    }
-  void *argv_loc = *esp;
-  *esp -= sizeof (void *);
-  memcpy (*esp, &argv_loc, sizeof (void *));
-  *esp -= sizeof (int);
-  memcpy (*esp, &argc, sizeof (int));
-  *esp -= sizeof (void *);
-
+    /* Initialize interrupt frame and load executable. */
+    memset (&if_, 0, sizeof if_);
+    if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
+    if_.cs = SEL_UCSEG;
+    if_.eflags = FLAG_IF | FLAG_MBS;
+    success = load (argv[0], &if_.eip, &if_.esp);
+  if (success) {
+    void **esp = &if_.esp;
+    void *argv_addr[argc];
+    int i;
+    for (i = 0; i < argc; i++)
+      {
+        *esp -= strlen (argv[i]) + 1;
+        strlcpy (*esp, argv[i], strlen (argv[i]) + 1);
+        argv_addr[i] = *esp;
+      }
+    int offset = 4 - ((unsigned int)*esp % 4);
+    *esp -= offset;
+    memset (*esp, 0, offset);
+    for (i = argc; i >= 0; i--)
+      {
+        *esp -= sizeof (void *);
+        if (i == argc)
+          {
+            memset (*esp, 0, sizeof (void *));
+          }
+        else
+          {
+            memcpy (*esp, &argv_addr[i], sizeof (void *));
+          }
+      }
+    void *argv_loc = *esp;
+    *esp -= sizeof (void *);
+    memcpy (*esp, &argv_loc, sizeof (void *));
+    *esp -= sizeof (int);
+    memcpy (*esp, &argc, sizeof (int));
+    *esp -= sizeof (void *);
+  }
   /* If load failed, quit. */
   palloc_free_page (file_name);
+  thread_current()->parent_wait->successfully_loaded = success;
+  list_push_back(&thread_by_id(thread_current()->parent_wait->parent_id)->child_waits, &thread_current()->parent_wait->elem);
+  sema_up(&thread_current()->parent_wait->load_semaphore);
   if (!success)
     thread_exit ();
 
@@ -144,10 +156,23 @@ start_process (void *file_name_)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED)
+process_wait (tid_t child_tid)
 {
-  sema_down (&temporary);
-  return 0;
+  struct wait_status* w;
+  if (list_empty(&thread_current()->child_waits)) {
+    w = thread_by_id(child_tid)->parent_wait;
+  } else {
+    struct list_elem* e = list_front(&thread_current()->child_waits);
+    while (e != list_tail(&thread_current()->child_waits)) {
+      w = list_entry(e, struct wait_status, elem);
+      if (w->child_id == child_tid) {
+        break;
+      }
+      e = list_next(e);
+    }
+  }
+  sema_down (&w->wait_semaphore);
+  return w->exit_code;
 }
 
 /* Free the current process's resources. */
@@ -173,7 +198,7 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
-  sema_up (&temporary);
+  sema_up (&thread_current()->parent_wait->wait_semaphore);
 }
 
 /* Sets up the CPU for running user code in the current
