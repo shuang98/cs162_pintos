@@ -46,45 +46,119 @@ syscall_handler (struct intr_frame *f UNUSED)
       case SYS_READ:
       case SYS_WRITE:
         {
+          if (!is_valid_pointer (f->esp + 12))
+            invalid_access (f);
           int fd = args[1];
-          // probably need to check args for this call too.
-          char *buffer = (char*)args[2];
-          size_t size = args[3];
-          write (fd, buffer, size);
+          char *buffer = (char *) args[2];
+          if (buffer == NULL || !is_valid_pointer (buffer))
+            invalid_access (f);
+          uint32_t size = args[3];
+          lock_acquire (&filesys_lock);
+          int result;
+          if (args[0] == SYS_READ)
+            {
+              result = read (fd, buffer, size);
+            }
+          else
+            {
+              result = write (fd, buffer, size);
+            }
+          lock_release (&filesys_lock);
+          if (result == -1)
+            invalid_access (f);
+          f->eax = result;
           break;
         }
 
       case SYS_SEEK:
       case SYS_CREATE:
-        // {
-        //   if (!is_valid_pointer (f->esp + 8))
-        //     invalid_access (f);
-        //   if (args[0] == SYS_SEEK)
-        //     {
-        //       int fd = args[1];
-        //       uint32_t pos = args[2];
-        //       lock_acquire (&filesys_lock);
-        //       seek (fd, pos);
-        //       lock_release (&filesys_lock);
-        //     }
-        //   else if (args[0] == SYS_CREATE)
-        //     {
-        //       char *file = (char *) args[1];
-        //       if (file == NULL || !is_valid_pointer (file))
-        //         invalid_access (f);
-        //       uint32_t init_size = args[2];
-        //       lock_acquire (&filesys_lock);
-        //       bool result = create (file, init_size);
-        //       lock_release (&filesys_lock);
-        //       f->eax = result;
-        //     }
-        //   break;
-        // }
+        {
+          if (!is_valid_pointer (f->esp + 8))
+            invalid_access (f);
+          if (args[0] == SYS_SEEK)
+            {
+              int fd = args[1];
+              uint32_t pos = args[2];
+              lock_acquire (&filesys_lock);
+              seek (fd, pos);
+              lock_release (&filesys_lock);
+            }
+          else if (args[0] == SYS_CREATE)
+            {
+              char *file = (char *) args[1];
+              if (file == NULL || !is_valid_pointer (file))
+                invalid_access (f);
+              uint32_t init_size = args[2];
+              lock_acquire (&filesys_lock);
+              bool result = create (file, init_size);
+              lock_release (&filesys_lock);
+              f->eax = result;
+            }
+          break;
+        }
 
       case SYS_OPEN:
       case SYS_FILESIZE:
       case SYS_TELL:
       case SYS_CLOSE:
+      case SYS_REMOVE:
+        {
+          if (!is_valid_pointer (f->esp + 4))
+            invalid_access (f);
+          if (args[0] == SYS_REMOVE)
+            {
+              char *file = (char *) args[1];
+              if (file == NULL || !is_valid_pointer (file))
+                invalid_access (f);
+              lock_acquire (&filesys_lock);
+              bool result = remove (file);
+              lock_release (&filesys_lock);
+              f->eax = result;
+              break;
+            }
+          else if (args[0] == SYS_OPEN)
+            {
+              char *file = (char *) args[1];
+              if (file == NULL || !is_valid_pointer (file))
+                invalid_access (f);
+              lock_acquire (&filesys_lock);
+              int result = open (file);
+              lock_release (&filesys_lock);
+              f->eax = result;
+              break;
+            }
+          else if (args[0] == SYS_FILESIZE)
+            {
+              int fd = args[1];
+              lock_acquire (&filesys_lock);
+              int result = filesize (fd);
+              lock_release (&filesys_lock);
+              f->eax = result;
+              break;
+            }
+          else if (args[0] == SYS_TELL)
+            {
+              int fd = args[1];
+              lock_acquire (&filesys_lock);
+              unsigned result = tell (fd);
+              lock_release (&filesys_lock);
+              f->eax = result;
+              break;
+            }
+          else if (args[0] == SYS_CLOSE)
+            {
+              int fd = args[1];
+              close (fd);
+              break;
+            }
+          else if (args[0] == SYS_EXIT)
+            {
+              f->eax = args[1];
+              printf("%s: exit(%d)\n", &thread_current ()->name, args[1]);
+              thread_exit();
+              break;
+            }
+        }
       case SYS_EXIT:
         old = intr_disable();
         f->eax = args[1];
@@ -121,65 +195,6 @@ syscall_handler (struct intr_frame *f UNUSED)
           f->eax = child_id;
         }
         break;
-      case SYS_REMOVE:
-        // {
-        //   if (!is_valid_pointer (f->esp + 4))
-        //     invalid_access (f);
-        //   if (args[0] == SYS_REMOVE)
-        //     {
-        //       char *file = (char *) args[1];
-        //       if (file == NULL || !is_valid_pointer (file))
-        //         invalid_access (f);
-        //       lock_acquire (&filesys_lock);
-        //       bool result = remove (file);
-        //       lock_release (&filesys_lock);
-        //       f->eax = result;
-        //       break;
-        //     }
-        //   else if (args[0] == SYS_OPEN)
-        //     {
-        //       char *file = (char *) args[1];
-        //       if (file == NULL || !is_valid_pointer (file))
-        //         invalid_access (f);
-        //       lock_acquire (&filesys_lock);
-        //       int result = open (file);
-        //       lock_release (&filesys_lock);
-        //       f->eax = result;
-        //       break;
-        //     }
-        //   else if (args[0] == SYS_FILESIZE)
-        //     {
-        //       int fd = args[1];
-        //       lock_acquire (&filesys_lock);
-        //       int result = filesize (fd);
-        //       lock_release (&filesys_lock);
-        //       f->eax = result;
-        //       break;
-        //     }
-        //   else if (args[0] == SYS_TELL)
-        //     {
-        //       int fd = args[1];
-        //       lock_acquire (&filesys_lock);
-        //       unsigned result = tell (fd);
-        //       lock_release (&filesys_lock);
-        //       f->eax = result;
-        //       break;
-        //     }
-        //   else if (args[0] == SYS_CLOSE)
-        //     {
-        //       int fd = args[1];
-        //       close (fd);
-        //       break;
-        //     }
-        //   else if (args[0] == SYS_EXIT)
-        //     {
-        //       f->eax = args[1];
-        //       printf("%s: exit(%d)\n", &thread_current ()->name, args[1]);
-        //       thread_exit();
-        //       break;
-        //     }
-        // }
-
       case SYS_PRACTICE:
         f->eax = args[1] + 1;
         break;
