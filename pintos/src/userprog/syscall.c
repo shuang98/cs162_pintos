@@ -29,6 +29,7 @@ static void
 invalid_access (struct intr_frame *f UNUSED)
 {
   f->eax = -1;
+  thread_current()->parent_wait->exit_code = -1;
   printf("%s: exit(%d)\n", &thread_current ()->name, -1);
   thread_exit ();
 }
@@ -163,6 +164,17 @@ syscall_handler (struct intr_frame *f UNUSED)
         old = intr_disable();
         f->eax = args[1];
         thread_current()->parent_wait->exit_code = args[1];
+        if (!list_empty(&thread_current()->child_waits)) {
+          struct wait_status* wa;
+          struct list_elem* el = list_front(&thread_current()->child_waits);
+          while (el != list_tail(&thread_current()->child_waits)) {
+            struct list_elem* next = list_next(el);
+            wa = list_entry(el, struct wait_status, elem);
+            list_remove(el);
+            free(wa);
+            el = next;
+          }
+        }
         printf("%s: exit(%d)\n", &thread_current ()->name, args[1]);
         thread_exit ();
         intr_set_level(old);
