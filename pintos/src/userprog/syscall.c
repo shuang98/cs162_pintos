@@ -192,6 +192,10 @@ syscall_handler (struct intr_frame *f UNUSED)
         struct thread* child = thread_by_id(child_id);
         intr_set_level(old);
         sema_down(&child->parent_wait->load_semaphore);
+        if (list_empty(&thread_current()->child_waits)) {
+          f->eax = -1;
+          return NULL;
+        }
         struct wait_status* w;
         struct list_elem* e = list_front(&thread_current()->child_waits);
         while (e != list_tail(&thread_current()->child_waits)) {

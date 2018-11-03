@@ -306,15 +306,6 @@ void
 thread_exit (void)
 {
   ASSERT (!intr_context ());
-
-#ifdef USERPROG
-  process_exit ();
-#endif
-
-  /* Remove thread from all threads list, set our status to dying,
-     and schedule another process.  That process will destroy us
-     when it calls thread_schedule_tail(). */
-  intr_disable ();
   struct thread *curr_thread = thread_current ();
   struct list_elem *e;
   int fds[list_size (curr_thread->fd_root)];
@@ -330,9 +321,20 @@ thread_exit (void)
     {
       close (fds[i]);
     }
-  file_allow_write (thread_current ()->executable);
+  if (thread_current ()->executable != NULL)
+    file_allow_write (thread_current ()->executable);
+
+#ifdef USERPROG
+  process_exit ();
+#endif
+
+  /* Remove thread from all threads list, set our status to dying,
+     and schedule another process.  That process will destroy us
+     when it calls thread_schedule_tail(). */
+  intr_disable ();
   list_remove (&thread_current()->allelem);
   thread_current ()->status = THREAD_DYING;
+
   schedule ();
   NOT_REACHED ();
 }
