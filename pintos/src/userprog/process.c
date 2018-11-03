@@ -325,6 +325,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
       goto done;
     }
   file_deny_write (file);
+  t->executable = file;
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr

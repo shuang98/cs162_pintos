@@ -120,7 +120,7 @@ struct thread
     struct list child_waits;
     struct wait_status* parent_wait;
     
-
+    struct file *executable;
 // #endif
     struct list *fd_root;
     /* Owned by thread.c. */
