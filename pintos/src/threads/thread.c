@@ -323,7 +323,17 @@ thread_exit (void)
     }
   if (thread_current ()->executable != NULL)
     file_allow_write (thread_current ()->executable);
-
+  if (!list_empty(&thread_current()->child_waits)) {
+    struct wait_status* wa;
+    struct list_elem* el = list_front(&thread_current()->child_waits);
+    while (el != list_tail(&thread_current()->child_waits)) {
+      struct list_elem* next = list_next(el);
+      wa = list_entry(el, struct wait_status, elem);
+      list_remove(el);
+      free(wa);
+      el = next;
+    }
+  }
 #ifdef USERPROG
   process_exit ();
 #endif

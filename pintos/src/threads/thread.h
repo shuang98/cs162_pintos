@@ -35,9 +35,6 @@ struct wait_status {
   struct semaphore load_semaphore;
   bool successfully_loaded;
   int exit_code;
-  int child_counter;
-  struct lock counter_lock;
-  struct condition cond;
   struct list_elem elem;
 };
 

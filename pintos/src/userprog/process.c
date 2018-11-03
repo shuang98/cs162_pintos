@@ -55,8 +55,6 @@ process_execute (const char *file_name)
   child->parent_wait = malloc(sizeof(struct wait_status));
   sema_init(&child->parent_wait->wait_semaphore, 0);
   sema_init(&child->parent_wait->load_semaphore, 0);
-  lock_init(&child->parent_wait->counter_lock);
-  cond_init(&child->parent_wait->cond);
   child->parent_wait->child_id = tid;
   child->parent_wait->parent_id = thread_current()->tid;
   child->parent_wait->successfully_loaded = 0;
