@@ -131,7 +131,8 @@ start_process (void *file_name_)
   /* If load failed, quit. */
   palloc_free_page (file_name);
   thread_current()->parent_wait->successfully_loaded = success;
-  list_push_back(&thread_by_id(thread_current()->parent_wait->parent_id)->child_waits, &thread_current()->parent_wait->elem);
+  if (success)
+    list_push_back(&thread_by_id(thread_current()->parent_wait->parent_id)->child_waits, &thread_current()->parent_wait->elem);
   sema_up(&thread_current()->parent_wait->load_semaphore);
   if (!success)
     thread_exit ();
@@ -158,9 +159,13 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid)
 {
-  struct wait_status* w;
+  struct wait_status* w = NULL;
   if (list_empty(&thread_current()->child_waits)) {
-    w = thread_by_id(child_tid)->parent_wait;
+    struct thread* t = thread_by_id(child_tid);
+    if (!t) {
+      return -1;
+    }
+    w = t->parent_wait;
   } else {
     struct list_elem* e = list_front(&thread_current()->child_waits);
     while (e != list_tail(&thread_current()->child_waits)) {
@@ -170,9 +175,15 @@ process_wait (tid_t child_tid)
       }
       e = list_next(e);
     }
+    if (e == list_tail(&thread_current()->child_waits)) {
+      return -1;
+    }
   }
   sema_down (&w->wait_semaphore);
-  return w->exit_code;
+  int exit_code =  w->exit_code;
+  list_remove(&w->elem);
+  free(w);
+  return exit_code;
 }
 
 /* Free the current process's resources. */
@@ -314,6 +325,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
       goto done;
     }
   file_deny_write (file);
+  t->executable = file;
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
