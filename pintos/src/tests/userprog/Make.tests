@@ -5,7 +5,7 @@ tests/%.output: PUTFILES = $(filter-out kernel.bin loader.bin, $^)
 
 tests/userprog_TESTS = $(addprefix tests/userprog/,args-none		\
 args-single args-multiple args-many args-dbl-space sc-bad-sp		\
-sc-bad-arg sc-boundary sc-boundary-2 halt exit create-normal		\
+sc-bad-arg sc-bad-bndry sc-boundary sc-boundary-2 halt exit create-normal		\
 create-empty create-null create-bad-ptr create-long create-exists	\
 create-bound open-normal open-missing open-boundary open-empty		\
 open-null open-bad-ptr open-twice close-normal close-twice close-stdin	\
@@ -29,6 +29,7 @@ tests/userprog/args-many_SRC = tests/userprog/args.c
 tests/userprog/args-dbl-space_SRC = tests/userprog/args.c
 tests/userprog/sc-bad-sp_SRC = tests/userprog/sc-bad-sp.c tests/main.c
 tests/userprog/sc-bad-arg_SRC = tests/userprog/sc-bad-arg.c tests/main.c
+tests/userprog/sc-bad-bndry_SRC = tests/userprog/sc-bad-bndry.c tests/main.c
 tests/userprog/bad-read_SRC = tests/userprog/bad-read.c tests/main.c
 tests/userprog/bad-write_SRC = tests/userprog/bad-write.c tests/main.c
 tests/userprog/bad-jump_SRC = tests/userprog/bad-jump.c tests/main.c

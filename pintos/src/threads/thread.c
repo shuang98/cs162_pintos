@@ -75,21 +75,21 @@ void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
 struct thread*
-thread_by_id(int tid) {
-  enum intr_level old = intr_disable();
+thread_by_id(int tid) 
+{
+  enum intr_level old = intr_disable ();
   struct thread* t;
-  struct list_elem* e = list_front(&all_list);
-  while (e != list_tail(&all_list)) {
-    t = list_entry(e, struct thread, allelem);
+  struct list_elem* e = list_front (&all_list);
+  while (e != list_tail (&all_list)) {
+    t = list_entry (e, struct thread, allelem);
     if (t->tid == tid) {
-      intr_set_level(old);
+      intr_set_level (old);
       return t;
     }
-    e = list_next(e);
+    e = list_next (e);
   }
-  intr_set_level(old);
+  intr_set_level (old);
   return NULL;
-
 }
 
 
@@ -206,7 +206,7 @@ thread_create (const char *name, int priority,
   tid = t->tid = allocate_tid ();
 
   /* Initialize fd_table */
-  struct list *table_root = (struct list *) malloc(sizeof(struct list));
+  struct list *table_root = (struct list *) malloc (sizeof (struct list));
   list_init (table_root);
   t->fd_root = table_root;
 
@@ -324,17 +324,19 @@ thread_exit (void)
     }
   if (thread_current ()->executable != NULL)
     file_allow_write (thread_current ()->executable);
-  if (!list_empty(&thread_current()->child_waits)) {
-    struct wait_status* wa;
-    struct list_elem* el = list_front(&thread_current()->child_waits);
-    while (el != list_tail(&thread_current()->child_waits)) {
-      struct list_elem* next = list_next(el);
-      wa = list_entry(el, struct wait_status, elem);
-      list_remove(el);
-      free(wa);
-      el = next;
+  if (!list_empty (&thread_current ()->child_waits)) 
+    {
+      struct wait_status* wa;
+      struct list_elem* el = list_front (&thread_current ()->child_waits);
+      while (el != list_tail (&thread_current ()->child_waits)) 
+        {
+          struct list_elem* next = list_next (el);
+          wa = list_entry (el, struct wait_status, elem);
+          list_remove (el);
+          free (wa);
+          el = next;
+        }
     }
-  }
   free (curr_thread->fd_root);
   if (lock_held_by_current_thread (&filesys_lock))
     {
@@ -348,9 +350,8 @@ thread_exit (void)
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
   intr_disable ();
-  list_remove (&thread_current()->allelem);
+  list_remove (&thread_current ()->allelem);
   thread_current ()->status = THREAD_DYING;
-
   schedule ();
   NOT_REACHED ();
 }
@@ -522,7 +523,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
-  list_init(&t->child_waits);
+  list_init (&t->child_waits);
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);

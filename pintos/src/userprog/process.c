@@ -51,14 +51,14 @@ process_execute (const char *file_name)
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (name, PRI_DEFAULT, start_process, fn_copy);
-  struct thread* child = thread_by_id(tid);
-  child->parent_wait = malloc(sizeof(struct wait_status));
-  sema_init(&child->parent_wait->wait_semaphore, 0);
-  sema_init(&child->parent_wait->load_semaphore, 0);
+  struct thread* child = thread_by_id (tid);
+  child->parent_wait = malloc (sizeof (struct wait_status));
+  sema_init (&child->parent_wait->wait_semaphore, 0);
+  sema_init (&child->parent_wait->load_semaphore, 0);
   child->parent_wait->child_id = tid;
-  child->parent_wait->parent_id = thread_current()->tid;
+  child->parent_wait->parent_id = thread_current ()->tid;
   child->parent_wait->successfully_loaded = 0;
-  list_push_back(&thread_current()->child_waits, &child->parent_wait->elem);
+  list_push_back(&thread_current ()->child_waits, &child->parent_wait->elem);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy);
   return tid;
@@ -95,38 +95,39 @@ start_process (void *file_name_)
     if_.cs = SEL_UCSEG;
     if_.eflags = FLAG_IF | FLAG_MBS;
     success = load (argv[0], &if_.eip, &if_.esp);
-  if (success) {
-    void **esp = &if_.esp;
-    void *argv_addr[argc];
-    int i;
-    for (i = 0; i < argc; i++)
-      {
-        *esp -= strlen (argv[i]) + 1;
-        strlcpy (*esp, argv[i], strlen (argv[i]) + 1);
-        argv_addr[i] = *esp;
-      }
-    int offset = 4 - ((unsigned int)*esp % 4);
-    *esp -= offset;
-    memset (*esp, 0, offset);
-    for (i = argc; i >= 0; i--)
-      {
-        *esp -= sizeof (void *);
-        if (i == argc)
-          {
-            memset (*esp, 0, sizeof (void *));
-          }
-        else
-          {
-            memcpy (*esp, &argv_addr[i], sizeof (void *));
-          }
-      }
-    void *argv_loc = *esp;
-    *esp -= sizeof (void *);
-    memcpy (*esp, &argv_loc, sizeof (void *));
-    *esp -= sizeof (int);
-    memcpy (*esp, &argc, sizeof (int));
-    *esp -= sizeof (void *);
-  }
+  if (success) 
+    {
+      void **esp = &if_.esp;
+      void *argv_addr[argc];
+      int i;
+      for (i = 0; i < argc; i++)
+        {
+          *esp -= strlen (argv[i]) + 1;
+          strlcpy (*esp, argv[i], strlen (argv[i]) + 1);
+          argv_addr[i] = *esp;
+        }
+      int offset = 4 - ((unsigned int)*esp % 4);
+      *esp -= offset;
+      memset (*esp, 0, offset);
+      for (i = argc; i >= 0; i--)
+        {
+          *esp -= sizeof (void *);
+          if (i == argc)
+            {
+              memset (*esp, 0, sizeof (void *));
+            }
+          else
+            {
+              memcpy (*esp, &argv_addr[i], sizeof (void *));
+            }
+        }
+      void *argv_loc = *esp;
+      *esp -= sizeof (void *);
+      memcpy (*esp, &argv_loc, sizeof (void *));
+      *esp -= sizeof (int);
+      memcpy (*esp, &argc, sizeof (int));
+      *esp -= sizeof (void *);
+    }
   /* If load failed, quit. */
   palloc_free_page (file_name);
   thread_current()->parent_wait->successfully_loaded = success;
@@ -157,29 +158,36 @@ int
 process_wait (tid_t child_tid)
 {
   struct wait_status* w = NULL;
-  if (list_empty(&thread_current()->child_waits)) {
-    struct thread* t = thread_by_id(child_tid);
-    if (!t) {
-      return -1;
+  if (list_empty (&thread_current ()->child_waits)) 
+    {
+      struct thread* t = thread_by_id (child_tid);
+      if (!t) 
+        {
+          return -1;
+        }
+      w = t->parent_wait;
+    } 
+  else 
+    {
+      struct list_elem* e = list_front(&thread_current()->child_waits);
+      while (e != list_tail(&thread_current()->child_waits)) 
+        {
+          w = list_entry(e, struct wait_status, elem);
+          if (w->child_id == child_tid) 
+            {
+              break;
+            }
+          e = list_next(e);
+        }
+      if (e == list_tail(&thread_current()->child_waits)) 
+        {
+          return -1;
+        }
     }
-    w = t->parent_wait;
-  } else {
-    struct list_elem* e = list_front(&thread_current()->child_waits);
-    while (e != list_tail(&thread_current()->child_waits)) {
-      w = list_entry(e, struct wait_status, elem);
-      if (w->child_id == child_tid) {
-        break;
-      }
-      e = list_next(e);
-    }
-    if (e == list_tail(&thread_current()->child_waits)) {
-      return -1;
-    }
-  }
   sema_down (&w->wait_semaphore);
-  int exit_code =  w->exit_code;
-  list_remove(&w->elem);
-  free(w);
+  int exit_code = w->exit_code;
+  list_remove (&w->elem);
+  free (w);
   return exit_code;
 }
 
@@ -206,7 +214,7 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
-  sema_up (&thread_current()->parent_wait->wait_semaphore);
+  sema_up (&thread_current ()->parent_wait->wait_semaphore);
 }
 
 /* Sets up the CPU for running user code in the current
@@ -576,10 +584,10 @@ open (const char *file)
   struct file *open_file = filesys_open (file);
   if (open_file == NULL)
     return -1;
-  struct file *file_in_mem = (struct file *)malloc (sizeof (struct file));
+  struct file *file_in_mem = (struct file *) malloc (sizeof (struct file));
   memcpy (file_in_mem, open_file, sizeof (struct file));
 
-  struct fd_elem *file_node = (struct fd_elem *)malloc (sizeof (struct fd_elem));
+  struct fd_elem *file_node = (struct fd_elem *) malloc (sizeof (struct fd_elem));
   file_node->fd = 0;
   file_node->file_ptr = file_in_mem;
 
