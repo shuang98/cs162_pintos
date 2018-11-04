@@ -13,6 +13,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "userprog/syscall.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -334,6 +335,10 @@ thread_exit (void)
       el = next;
     }
   }
+  if (lock_held_by_current_thread (&filesys_lock))
+    {
+      lock_release (&filesys_lock);
+    }
 #ifdef USERPROG
   process_exit ();
 #endif

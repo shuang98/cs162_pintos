@@ -10,7 +10,6 @@
 #include "devices/shutdown.h"
 
 static void syscall_handler (struct intr_frame *);
-struct lock filesys_lock;
 
 void
 syscall_init (void)
