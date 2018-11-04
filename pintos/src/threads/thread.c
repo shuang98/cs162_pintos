@@ -317,7 +317,7 @@ thread_exit (void)
       counter++;      
     }
   int i;
-  for (i = 0; counter < counter; i += 1)
+  for (i = 0; i < counter; i += 1)
     {
       close (fds[i]);
     }

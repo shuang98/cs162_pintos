@@ -58,6 +58,7 @@ process_execute (const char *file_name)
   child->parent_wait->child_id = tid;
   child->parent_wait->parent_id = thread_current()->tid;
   child->parent_wait->successfully_loaded = 0;
+  list_push_back(&thread_current()->child_waits, &child->parent_wait->elem);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy);
   return tid;
@@ -129,8 +130,6 @@ start_process (void *file_name_)
   /* If load failed, quit. */
   palloc_free_page (file_name);
   thread_current()->parent_wait->successfully_loaded = success;
-  if (success)
-    list_push_back(&thread_by_id(thread_current()->parent_wait->parent_id)->child_waits, &thread_current()->parent_wait->elem);
   sema_up(&thread_current()->parent_wait->load_semaphore);
   if (!success)
     thread_exit ();
