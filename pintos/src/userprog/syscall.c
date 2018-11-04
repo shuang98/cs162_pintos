@@ -53,17 +53,19 @@ syscall_handler (struct intr_frame *f UNUSED)
           if (buffer == NULL || !is_valid_pointer (buffer))
             invalid_access (f);
           uint32_t size = args[3];
-          lock_acquire (&filesys_lock);
           int result;
           if (args[0] == SYS_READ)
             {
+              lock_acquire (&filesys_lock);
               result = read (fd, buffer, size);
+              lock_release (&filesys_lock);
             }
           else
             {
+              lock_acquire (&filesys_lock);
               result = write (fd, buffer, size);
+              lock_release (&filesys_lock);
             }
-          lock_release (&filesys_lock);
           if (result == -1)
             invalid_access (f);
           f->eax = result;
@@ -148,7 +150,9 @@ syscall_handler (struct intr_frame *f UNUSED)
           else if (args[0] == SYS_CLOSE)
             {
               int fd = args[1];
+              lock_acquire (&filesys_lock);
               close (fd);
+              lock_release (&filesys_lock);
               break;
             }
           else if (args[0] == SYS_EXIT)
@@ -205,7 +209,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 
       case SYS_HALT:
         {
-          // shutdown_power_off ();
+          shutdown_power_off ();
           break;
         }
     }

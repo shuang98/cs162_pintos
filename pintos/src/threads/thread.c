@@ -335,6 +335,7 @@ thread_exit (void)
       el = next;
     }
   }
+  free (curr_thread->fd_root);
   if (lock_held_by_current_thread (&filesys_lock))
     {
       lock_release (&filesys_lock);
