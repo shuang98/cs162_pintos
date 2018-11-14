@@ -584,12 +584,10 @@ open (const char *file)
   struct file *open_file = filesys_open (file);
   if (open_file == NULL)
     return -1;
-  struct file *file_in_mem = (struct file *) malloc (sizeof (struct file));
-  memcpy (file_in_mem, open_file, sizeof (struct file));
 
   struct fd_elem *file_node = (struct fd_elem *) malloc (sizeof (struct fd_elem));
   file_node->fd = 0;
-  file_node->file_ptr = file_in_mem;
+  file_node->file_ptr = open_file;
 
   struct list_elem *e;
   struct thread *curr_thread = thread_current ();
