@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include <stdio.h>
+#include "../filesys/directory.h"
 #include "threads/synch.h"
 #include "threads/fixed-point.h"
 
@@ -119,6 +120,7 @@ struct thread
     
     struct file *executable;
     struct list *fd_root;
+    struct dir *working_dir;
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
@@ -127,6 +129,7 @@ struct fd_elem
   {
     int fd;
     struct file *file_ptr;
+    struct dir *dir;
     struct list_elem table_elem;
   };
   

@@ -13,6 +13,7 @@
 #include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
+#include "filesys/inode.h"
 #include "threads/flags.h"
 #include "threads/init.h"
 #include "threads/interrupt.h"
@@ -141,6 +142,8 @@ start_process (void *file_name_)
      arguments on the stack in the form of a `struct intr_frame',
      we just point the stack pointer (%esp) to our stack frame
      and jump to it. */
+  if (thread_current ()->working_dir == NULL) 
+    thread_current ()->working_dir = dir_open_root ();
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
 }
@@ -587,8 +590,7 @@ open (const char *file)
 
   struct fd_elem *file_node = (struct fd_elem *) malloc (sizeof (struct fd_elem));
   file_node->fd = 0;
-  file_node->file_ptr = open_file;
-
+  
   struct list_elem *e;
   struct thread *curr_thread = thread_current ();
   int count = 2;
@@ -606,6 +608,16 @@ open (const char *file)
     {
       file_node->fd = count;
     }
+  if (is_dir_inode (open_file->inode))
+  {
+    file_node->dir = dir_open (open_file->inode);
+    file_node->file_ptr = NULL;
+  }
+else
+  {
+    file_node->file_ptr = open_file;
+    file_node->dir = NULL;
+  }
   list_insert_ordered (curr_thread->fd_root, &file_node->table_elem, fd_compare, NULL);
   return file_node->fd;
 }
@@ -621,7 +633,9 @@ filesize (int fd)
       if (f->fd == fd)
         {
           struct file *file = f->file_ptr;
-          return file_length (file);
+          if (file)
+            return file_length (file);
+          break;
         }
     }
   return -1;
@@ -653,6 +667,10 @@ read (int fd, void *buffer, unsigned size)
             else
               {
                 // fd exists and we found it
+                if (curr_elem->file_ptr == NULL)
+                  {
+                    return -1;
+                  }
                 off_t bytes_read = file_read (curr_elem->file_ptr, buffer, (off_t) size);
                 return bytes_read;
               }
@@ -684,6 +702,10 @@ write (int fd, void *buffer, unsigned size)
             else
               // found fd
               {
+                if (curr_fd_elem->file_ptr == NULL)
+                  {
+                    return -1;
+                  }
                 off_t bytes_written = file_write (curr_fd_elem->file_ptr, buffer, size);
                 return (int) bytes_written;
               }
@@ -703,6 +725,10 @@ seek (int fd, unsigned position)
       struct fd_elem *f = list_entry (e, struct fd_elem, table_elem);
       if (f->fd == fd)
         {
+          if (f->file_ptr == NULL)
+            {
+              return;
+            }
           struct file *file = f->file_ptr;
           file_seek (file, position);
         }
@@ -718,6 +744,10 @@ tell (int fd)
     {
       struct fd_elem *f = list_entry (e, struct fd_elem, table_elem);
       if (f->fd == fd) {
+        if (f->file_ptr == NULL)
+          {
+            return -1;
+          }
         struct file *file = f->file_ptr;
         return file_tell (file);
       }
@@ -735,7 +765,10 @@ close (int fd)
       struct fd_elem *f = list_entry (e, struct fd_elem, table_elem);
       if (f->fd == fd)
         {
-          free (f->file_ptr);
+          if (f->dir)
+            dir_close (f->dir);
+          else
+            free (f->file_ptr);
           list_remove (&f->table_elem);
           free (f);
           break;
@@ -750,3 +783,39 @@ fd_compare (const struct list_elem *a_, const struct list_elem *b_, void *aux UN
   struct fd_elem *b = list_entry (b_, struct fd_elem, table_elem);
   return a->fd < b->fd;
 }
+
+int
+inumber (int fd)
+{
+  struct list_elem *e;
+  struct thread *curr_thread = thread_current ();
+  for (e = list_begin (curr_thread->fd_root); e != list_end (curr_thread->fd_root); e = list_next (e))
+    {
+      struct fd_elem *f = list_entry (e, struct fd_elem, table_elem);
+      if (f->fd == fd)
+        {
+          struct inode *fd_inode = f->file_ptr->inode;
+          return inode_get_inumber (fd_inode);
+        }
+    }
+  return -1;
+}
+
+bool
+is_dir (int fd)
+  {
+    struct list_elem *e;
+    struct thread *curr_thread = thread_current ();
+    for (e = list_begin (curr_thread->fd_root); e != list_end (curr_thread->fd_root); e = list_next (e))
+      {
+        struct fd_elem *f = list_entry (e, struct fd_elem, table_elem);
+        if (f->fd == fd)
+          {
+            if (f->dir)
+              return true;
+            else
+              break;
+          }
+      }
+    return false;
+  }

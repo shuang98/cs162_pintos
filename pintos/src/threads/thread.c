@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <list.h>
+#include "../filesys/directory.h"
 #include "threads/flags.h"
 #include "threads/interrupt.h"
 #include "threads/intr-stubs.h"

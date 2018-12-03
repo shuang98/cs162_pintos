@@ -8,13 +8,17 @@
 #include "userprog/process.h"
 #include "userprog/pagedir.h"
 #include "devices/shutdown.h"
+#include "../filesys/directory.h"
+#include "../filesys/filesys.h"
+#include "../filesys/inode.h"
+
 
 static void syscall_handler (struct intr_frame *);
+static bool is_relative (char *path);
 
 void
 syscall_init (void)
 {
-  lock_init (&filesys_lock);
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
@@ -31,6 +35,43 @@ invalid_access (struct intr_frame *f UNUSED)
   thread_current ()->parent_wait->exit_code = -1;
   printf ("%s: exit(%d)\n", &thread_current ()->name, -1);
   thread_exit ();
+}
+
+static bool
+is_relative (char *path)
+{
+  if (*path == '/')
+    return false;
+  return true;
+}
+
+/* Extracts a file name part from *SRCP into PART, and updates *SRCP so that the
+next call will return the next file name part. Returns 1 if successful, 0 at
+end of string, -1 for a too-long file name part. */
+static int
+get_next_part (char part[NAME_MAX + 1], const char **srcp) 
+{
+  const char *src = *srcp;
+  char *dst = part;
+  
+  /* Skip leading slashes. If it’s all slashes, we’re done. */
+  while (*src == '/')
+    src++;
+  if (*src == '\0')
+    return 0;
+  
+  /* Copy up to NAME_MAX character from SRC to DST. Add null terminator. */
+  while (*src != '/' && *src != '\0') {
+    if (dst < part + NAME_MAX)
+      *dst++ = *src;
+    else
+      return -1;
+    src++;
+  }
+  *dst = '\0';
+  /* Advance source pointer. */
+  *srcp = src;
+  return 1;
 }
 
 static void
@@ -55,15 +96,11 @@ syscall_handler (struct intr_frame *f UNUSED)
           int result;
           if (args[0] == SYS_READ)
             {
-              lock_acquire (&filesys_lock);
               result = read (fd, buffer, size);
-              lock_release (&filesys_lock);
             }
           else
             {
-              lock_acquire (&filesys_lock);
               result = write (fd, buffer, size);
-              lock_release (&filesys_lock);
             }
           if (result == -1)
             invalid_access (f);
@@ -72,6 +109,7 @@ syscall_handler (struct intr_frame *f UNUSED)
         }
 
       case SYS_SEEK:
+      case SYS_READDIR:
       case SYS_CREATE:
         {
           if (!is_valid_pointer (f->esp + 8))
@@ -80,9 +118,7 @@ syscall_handler (struct intr_frame *f UNUSED)
             {
               int fd = args[1];
               uint32_t pos = args[2];
-              lock_acquire (&filesys_lock);
               seek (fd, pos);
-              lock_release (&filesys_lock);
             }
           else if (args[0] == SYS_CREATE)
             {
@@ -90,10 +126,25 @@ syscall_handler (struct intr_frame *f UNUSED)
               if (file == NULL || !is_valid_pointer (file))
                 invalid_access (f);
               uint32_t init_size = args[2];
-              lock_acquire (&filesys_lock);
               bool result = create (file, init_size);
-              lock_release (&filesys_lock);
               f->eax = result;
+            }
+          else if (args[0] == SYS_READDIR)
+            {
+              // struct file *valid = filesys_open (args[2]);
+              // if (valid == NULL)
+              //   f->eax = 0;
+              // filesys_remove (args[2]);
+              // struct list_elem *e;
+              // struct dir *dir;
+              // struct thread *curr_thread = thread_current ();
+              // for (e = list_begin (curr_thread->fd_root); e != list_end (curr_thread->fd_root); e = list_next (e))
+              //   {
+              //     struct fd_elem *f = list_entry (e, struct fd_elem, table_elem);
+              //     if (f->fd == args[1])
+              //       {
+              //       }
+              //   }
             }
           break;
         }
@@ -103,6 +154,10 @@ syscall_handler (struct intr_frame *f UNUSED)
       case SYS_TELL:
       case SYS_CLOSE:
       case SYS_REMOVE:
+      case SYS_INUMBER:
+      case SYS_CHDIR:
+      case SYS_MKDIR:      
+      case SYS_ISDIR:
         {
           if (!is_valid_pointer (f->esp + 4))
             invalid_access (f);
@@ -111,9 +166,7 @@ syscall_handler (struct intr_frame *f UNUSED)
               char *file = (char *) args[1];
               if (file == NULL || !is_valid_pointer (file))
                 invalid_access (f);
-              lock_acquire (&filesys_lock);
               bool result = remove (file);
-              lock_release (&filesys_lock);
               f->eax = result;
               break;
             }
@@ -122,36 +175,28 @@ syscall_handler (struct intr_frame *f UNUSED)
               char *file = (char *) args[1];
               if (file == NULL || !is_valid_pointer (file))
                 invalid_access (f);
-              lock_acquire (&filesys_lock);
               int result = open (file);
-              lock_release (&filesys_lock);
               f->eax = result;
               break;
             }
           else if (args[0] == SYS_FILESIZE)
             {
               int fd = args[1];
-              lock_acquire (&filesys_lock);
               int result = filesize (fd);
-              lock_release (&filesys_lock);
               f->eax = result;
               break;
             }
           else if (args[0] == SYS_TELL)
             {
               int fd = args[1];
-              lock_acquire (&filesys_lock);
               unsigned result = tell (fd);
-              lock_release (&filesys_lock);
               f->eax = result;
               break;
             }
           else if (args[0] == SYS_CLOSE)
             {
               int fd = args[1];
-              lock_acquire (&filesys_lock);
               close (fd);
-              lock_release (&filesys_lock);
               break;
             }
           else if (args[0] == SYS_EXIT)
@@ -159,6 +204,83 @@ syscall_handler (struct intr_frame *f UNUSED)
               f->eax = args[1];
               printf ("%s: exit(%d)\n", &thread_current ()->name, args[1]);
               thread_exit();
+              break;
+            }
+          else if (args[0] == SYS_INUMBER)
+            {
+              int fd = args[1];
+              f->eax = inumber (fd);
+              break;
+            }
+          else if (args[0] == SYS_CHDIR)
+            {
+
+            }
+          else if (args[0] == SYS_MKDIR)
+            {
+              if (strlen (args[1]) == 0)
+                {
+                  f->eax = 0;
+                  break;
+                }
+              char part[NAME_MAX + 1];
+              if (is_relative (args[1]))
+                {
+                  struct dir *curr_dir = thread_current ()->working_dir;
+                  struct inode *inode_next;
+                  int check = 1;
+                  while (get_next_part (part, &args[1]))
+                    {
+                      if (dir_lookup (curr_dir, part, &inode_next))
+                        {
+                          if (is_dir_inode (inode_next))
+                            {
+                              curr_dir = dir_open (inode_next);
+                              inode_close (inode_next);
+                            }
+                          else
+                            {
+                              f->eax = 0;
+                              return;
+                            }
+                        }
+                      else
+                        {
+                          check = get_next_part (part, &args[1]);
+                          break;
+                        }
+                    }
+                  if (check == 0)
+                    {
+                      block_sector_t sector;
+                      if (!free_map_allocate (1, &sector))
+                        {
+                          f->eax = 0;
+                          return;
+                        }
+                      dir_add (curr_dir, part, sector);
+                      dir_create (sector, 2);
+                      struct inode *used;
+                      dir_lookup (curr_dir, part, &used);
+                      struct dir *new_dir = dir_open (used);
+                      char *str1 = ".";
+                      char *str2 = "..";
+                      dir_add (new_dir, str1, sector);
+                      struct inode *parent_inode = dir_get_inode (curr_dir);
+                      dir_add (new_dir, str2, inode_get_inumber (parent_inode));
+                      inode_close (used);
+                    }
+                  f->eax = 1;
+                }
+              else
+                {
+                }
+              break;
+            }
+          else if (args[0] == SYS_ISDIR)
+            {
+              int fd = args[1];
+              f->eax = is_dir (fd);
               break;
             }
         }
