@@ -7,6 +7,9 @@
 #include "filesys/filesys.h"
 #include "filesys/free-map.h"
 #include "threads/malloc.h"
+#include "../filesys/directory.h"
+#include "threads/thread.h"
+
 
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
@@ -77,7 +80,7 @@ struct inode
   };
 
 bool 
-is_dir_inode (struct inode *node)
+inode_is_dir (struct inode *node)
 {
   return node->data.is_dir;
 }
@@ -512,4 +515,112 @@ set_dir (struct inode *inode)
 {
   inode->data.is_dir = true;
 }
+bool
+is_relative (char *path)
+{
+  if (*path == '/')
+    return false;
+  return true;
+}
+/* Extracts a file name part from *SRCP into PART, and updates *SRCP so that the
+next call will return the next file name part. Returns 1 if successful, 0 at
+end of string, -1 for a too-long file name part. */
+int
+get_next_part (char part[NAME_MAX + 1], const char **srcp) 
+{
+  const char *src = *srcp;
+  char *dst = part;
+  
+  /* Skip leading slashes. If it’s all slashes, we’re done. */
+  while (*src == '/')
+    src++;
+  if (*src == '\0')
+    return 0;
+  
+  /* Copy up to NAME_MAX character from SRC to DST. Add null terminator. */
+  while (*src != '/' && *src != '\0') {
+    if (dst < part + NAME_MAX)
+      *dst++ = *src;
+    else
+      return -1;
+    src++;
+  }
+  *dst = '\0';
+  /* Advance source pointer. */
+  *srcp = src;
+  return 1;
+}
 
+char*
+get_last_part(char* path) 
+  { 
+    char part[NAME_MAX + 1];
+    while (get_next_part (part, &path)){}
+    return part;
+  }
+
+
+struct inode* 
+get_inode_from_path_parent (char* path)
+{
+  char part[NAME_MAX + 1];
+  struct dir *curr_dir = (is_relative (path)) ? dir_reopen (thread_current ()->working_dir) : dir_open_root();
+  struct inode *inode_next = dir_get_inode (curr_dir);
+  struct inode *inode_parent = NULL;
+
+  while (curr_dir && get_next_part (part, &path)) 
+    {
+      inode_close (inode_parent); 
+      inode_parent = inode_next;
+      if (dir_lookup (curr_dir, part, &inode_next))
+        if (inode_is_dir (inode_next))
+          curr_dir = dir_open (inode_next);
+        else 
+          {
+            free (curr_dir);
+            curr_dir = NULL;
+          }
+      else
+        {
+          free (curr_dir);;
+          curr_dir = NULL;
+        }
+    }
+  if (!get_next_part (part, &path)) {
+    if (curr_dir)
+      dir_close (curr_dir);
+    return inode_parent;
+  }
+  return NULL;
+}
+
+struct inode* 
+get_inode_from_path (char* path) 
+{
+  char part[NAME_MAX + 1];
+  struct dir *curr_dir = (is_relative (path)) ? dir_reopen (thread_current ()->working_dir) : dir_open_root();
+  struct inode *inode_next = dir_get_inode (curr_dir);
+
+  while (curr_dir && get_next_part (part, &path)) 
+    {
+      if (dir_lookup (curr_dir, part, &inode_next))
+        if (inode_is_dir (inode_next))
+          curr_dir = dir_open (inode_next);
+        else {
+          dir_close (curr_dir);
+          curr_dir = NULL;
+        }
+      else
+      {
+        dir_close (curr_dir);
+        curr_dir = NULL;
+      }
+    }
+  return inode_next;
+}
+
+bool 
+inode_is_removed (struct inode* inode) 
+  {
+    return inode->removed;
+  }

@@ -45,35 +45,6 @@ is_relative (char *path)
   return true;
 }
 
-/* Extracts a file name part from *SRCP into PART, and updates *SRCP so that the
-next call will return the next file name part. Returns 1 if successful, 0 at
-end of string, -1 for a too-long file name part. */
-static int
-get_next_part (char part[NAME_MAX + 1], const char **srcp) 
-{
-  const char *src = *srcp;
-  char *dst = part;
-  
-  /* Skip leading slashes. If it’s all slashes, we’re done. */
-  while (*src == '/')
-    src++;
-  if (*src == '\0')
-    return 0;
-  
-  /* Copy up to NAME_MAX character from SRC to DST. Add null terminator. */
-  while (*src != '/' && *src != '\0') {
-    if (dst < part + NAME_MAX)
-      *dst++ = *src;
-    else
-      return -1;
-    src++;
-  }
-  *dst = '\0';
-  /* Advance source pointer. */
-  *srcp = src;
-  return 1;
-}
-
 static void
 syscall_handler (struct intr_frame *f UNUSED)
 {
@@ -126,11 +97,23 @@ syscall_handler (struct intr_frame *f UNUSED)
               if (file == NULL || !is_valid_pointer (file))
                 invalid_access (f);
               uint32_t init_size = args[2];
+
               bool result = create (file, init_size);
+
               f->eax = result;
+              return;
             }
           else if (args[0] == SYS_READDIR)
             {
+
+              struct dir* dir = fd_dir (args[1]);
+              if (dir == NULL)
+                {
+                  f->eax = false;
+                  return;
+                }
+              f->eax = dir_readdir (dir, args[2]);
+              break;
               // struct file *valid = filesys_open (args[2]);
               // if (valid == NULL)
               //   f->eax = 0;
@@ -209,12 +192,29 @@ syscall_handler (struct intr_frame *f UNUSED)
           else if (args[0] == SYS_INUMBER)
             {
               int fd = args[1];
-              f->eax = inumber (fd);
+              f->eax = inode_get_inumber( fd_inode (fd) );
               break;
             }
           else if (args[0] == SYS_CHDIR)
             {
-
+              if (strlen (args[1]) == 0)
+                {
+                  f->eax = 0;
+                  break;
+                }
+              struct inode* inode = get_inode_from_path (args[1]);
+              struct dir* new_dir = NULL;
+              if (inode && inode_is_dir (inode))
+                new_dir = dir_open (inode);
+              else 
+                {
+                  f->eax = 0;
+                  return;
+                }
+              dir_close (thread_current ()->working_dir);
+              thread_current ()->working_dir = new_dir;
+              f->eax = 1;
+              return;
             }
           else if (args[0] == SYS_MKDIR)
             {
@@ -223,59 +223,40 @@ syscall_handler (struct intr_frame *f UNUSED)
                   f->eax = 0;
                   break;
                 }
+              struct inode* inode = get_inode_from_path_parent (args[1]);
+              if (inode == NULL) {
+                f->eax = 0;
+                break;
+              }
               char part[NAME_MAX + 1];
-              if (is_relative (args[1]))
+              while (get_next_part (part, &args[1])){}
+              char* new_dir_name = part;
+              struct dir* parent_dir = dir_open (inode);
+              struct inode* test;
+              if (dir_lookup (parent_dir, new_dir_name, &test)) {
+                inode_close (test);
+                f->eax = 0;
+                return;
+              }
+              block_sector_t sector;
+              if (!free_map_allocate (1, &sector))
                 {
-                  struct dir *curr_dir = thread_current ()->working_dir;
-                  struct inode *inode_next;
-                  int check = 1;
-                  while (get_next_part (part, &args[1]))
-                    {
-                      if (dir_lookup (curr_dir, part, &inode_next))
-                        {
-                          if (is_dir_inode (inode_next))
-                            {
-                              curr_dir = dir_open (inode_next);
-                              inode_close (inode_next);
-                            }
-                          else
-                            {
-                              f->eax = 0;
-                              return;
-                            }
-                        }
-                      else
-                        {
-                          check = get_next_part (part, &args[1]);
-                          break;
-                        }
-                    }
-                  if (check == 0)
-                    {
-                      block_sector_t sector;
-                      if (!free_map_allocate (1, &sector))
-                        {
-                          f->eax = 0;
-                          return;
-                        }
-                      dir_add (curr_dir, part, sector);
-                      dir_create (sector, 2);
-                      struct inode *used;
-                      dir_lookup (curr_dir, part, &used);
-                      struct dir *new_dir = dir_open (used);
-                      char *str1 = ".";
-                      char *str2 = "..";
-                      dir_add (new_dir, str1, sector);
-                      struct inode *parent_inode = dir_get_inode (curr_dir);
-                      dir_add (new_dir, str2, inode_get_inumber (parent_inode));
-                      inode_close (used);
-                    }
-                  f->eax = 1;
+                  f->eax = 0;
+                  return;
                 }
-              else
-                {
-                }
-              break;
+              dir_add (parent_dir, new_dir_name, sector);
+              dir_create (sector, 2);
+              struct inode *new_dir_inode;
+              dir_lookup (parent_dir, new_dir_name, &new_dir_inode);
+              struct dir *new_dir = dir_open (new_dir_inode);
+              char *str1 = ".";
+              char *str2 = "..";
+              dir_add (new_dir, str1, sector);
+              struct inode* parent_inode = dir_get_inode(parent_dir);
+              dir_add (new_dir, str2, inode_get_inumber (parent_inode));
+              dir_close (new_dir);
+              f->eax = 1;
+              return;
             }
           else if (args[0] == SYS_ISDIR)
             {

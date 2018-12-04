@@ -572,21 +572,96 @@ install_page (void *upage, void *kpage, bool writable)
 bool
 create (const char *file, unsigned initial_size)
 {
-  return filesys_create (file, initial_size);
+  block_sector_t inode_sector = 0;
+  if (strlen(file) == 0 || strlen(file) > NAME_MAX) 
+    return false;
+  struct dir *dir = NULL;
+  struct inode* inode = get_inode_from_path_parent(file);
+  if (inode_is_removed (inode)) {
+    return false;
+  }
+  if (inode && inode_is_dir (inode)){
+    dir = dir_open (inode);
+  } else {
+    return false;
+  }
+  char part[NAME_MAX + 1];
+  while (get_next_part (part, &file)){}
+  bool success = dir != NULL;
+  success = success && free_map_allocate (1, &inode_sector);
+  success = success && inode_create (inode_sector, initial_size);
+  success = success && dir_add (dir, part, inode_sector);
+  if (!success && inode_sector != 0)
+    free_map_release (inode_sector, 1);
+  dir_close (dir);
+  return success;
+}
+
+bool is_root (const char *file) {
+  return *file == '/' && strlen (file) == 1;
 }
 
 bool
 remove (const char *file)
 {
-  return filesys_remove (file);
+  // return filesys_remove (file);
+  if (is_root(file))
+    return false;
+  struct dir *dir = NULL;
+  struct inode* inode = get_inode_from_path_parent(file);
+  if (inode_is_dir (inode)){
+    dir = dir_open (inode);
+    
+  } else {
+    return false;
+  }
+  
+  char part[NAME_MAX + 1];
+  while (get_next_part (part, &file)){}
+  struct inode* del;
+  if (dir_lookup (dir, part, &del))
+    if (inode_is_dir (del)) 
+    {
+      struct dir *del_dir = dir_open (del);
+      char name[NAME_MAX + 1];
+      int count = 0;
+      while (dir_readdir (del_dir, name)) {
+        count++;
+      }
+      if (count > 0) {
+        dir_close (dir);
+        return false;
+      }
+      dir_remove (del_dir, ".");
+      dir_remove (del_dir, "..");
+      dir_close (del_dir);
+    }
+  bool success = dir != NULL && dir_remove (dir, part);
+  dir_close (dir);
+
+  return success;
 }
 
 int
 open (const char *file)
 {
-  struct file *open_file = filesys_open (file);
-  if (open_file == NULL)
+  if (strlen(file) == 0 || strlen(file) > NAME_MAX) 
     return -1;
+  // struct dir *dir = dir_open_root ();
+  struct inode *inode = get_inode_from_path(file);
+  struct file *open_file;
+  if (inode)
+    open_file = file_open (inode);
+  else
+    return -1;
+
+  // if (dir != NULL)
+  //   dir_lookup (dir, name, &inode);
+  // dir_close (dir);
+
+  // struct file *open_file = filesys_open (file);
+  // if (open_file == NULL)
+  //   return -1;
 
   struct fd_elem *file_node = (struct fd_elem *) malloc (sizeof (struct fd_elem));
   file_node->fd = 0;
@@ -608,7 +683,7 @@ open (const char *file)
     {
       file_node->fd = count;
     }
-  if (is_dir_inode (open_file->inode))
+  if (inode_is_dir (open_file->inode))
   {
     file_node->dir = dir_open (open_file->inode);
     file_node->file_ptr = NULL;
@@ -785,7 +860,7 @@ fd_compare (const struct list_elem *a_, const struct list_elem *b_, void *aux UN
 }
 
 int
-inumber (int fd)
+fd_inumber (int fd)
 {
   struct list_elem *e;
   struct thread *curr_thread = thread_current ();
@@ -796,6 +871,42 @@ inumber (int fd)
         {
           struct inode *fd_inode = f->file_ptr->inode;
           return inode_get_inumber (fd_inode);
+        }
+    }
+  return -1;
+}
+
+struct inode*
+fd_inode (int fd) {
+  struct list_elem *e;
+  struct thread *curr_thread = thread_current ();
+  for (e = list_begin (curr_thread->fd_root); e != list_end (curr_thread->fd_root); e = list_next (e))
+    {
+      struct fd_elem *f = list_entry (e, struct fd_elem, table_elem);
+      if (f->fd == fd)
+        {
+          struct inode *fd_inode;
+          if (f->file_ptr == NULL) 
+            fd_inode = dir_get_inode (f->dir);
+          else
+            fd_inode = f->file_ptr->inode;
+          return fd_inode;
+        }
+    }
+  return -1;
+}
+
+struct dir*
+fd_dir (int fd) 
+{
+  struct list_elem *e;
+  struct thread *curr_thread = thread_current ();
+  for (e = list_begin (curr_thread->fd_root); e != list_end (curr_thread->fd_root); e = list_next (e))
+    {
+      struct fd_elem *f = list_entry (e, struct fd_elem, table_elem);
+      if (f->fd == fd)
+        {
+          return f->dir;
         }
     }
   return -1;
