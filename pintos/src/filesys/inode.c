@@ -262,7 +262,10 @@ inode_open (block_sector_t sector)
   /* Allocate memory. */
   inode = malloc (sizeof *inode);
   if (inode == NULL)
+  {
+    lock_release (&open_inodes_lock);
     return NULL;
+  }
 
   /* Initialize. */
   list_push_front (&open_inodes, &inode->elem);
@@ -351,7 +354,6 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
   uint8_t *buffer = buffer_;
   off_t bytes_read = 0;
   uint8_t *bounce = NULL;
-
   while (size > 0)
     {
       /* Disk sector to read, starting byte offset within sector. */
@@ -409,7 +411,6 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
   const uint8_t *buffer = buffer_;
   off_t bytes_written = 0;
   uint8_t *bounce = NULL;
-
   lock_acquire (&inode->inode_lock);
   if (inode->deny_write_cnt)
     {
@@ -426,6 +427,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
   }
   if (offset + size > inode_length(inode)) {
     inode->data.length = offset + size;
+    block_write (fs_device, inode->sector, &inode->data);
   }
   while (size > 0)
     {
@@ -560,39 +562,36 @@ get_last_part(char* path)
   }
 
 
-struct inode* 
-get_inode_from_path_parent (char* path)
-{
-  char part[NAME_MAX + 1];
-  struct dir *curr_dir = (is_relative (path)) ? dir_reopen (thread_current ()->working_dir) : dir_open_root();
-  struct inode *inode_next = dir_get_inode (curr_dir);
-  struct inode *inode_parent = NULL;
+struct dir* get_parent_dir_from_path (char* path) 
+  {
+    char part[NAME_MAX + 1];
+    struct dir *curr_dir = (is_relative (path)) ? dir_reopen (thread_current ()->working_dir) : dir_open_root();
+    struct inode *inode_next = dir_get_inode (curr_dir);
+    // struct inode *inode_parent = NULL;
+    struct dir* parent_dir = NULL;
 
-  while (curr_dir && get_next_part (part, &path)) 
-    {
-      inode_close (inode_parent); 
-      inode_parent = inode_next;
-      if (dir_lookup (curr_dir, part, &inode_next))
-        if (inode_is_dir (inode_next))
-          curr_dir = dir_open (inode_next);
-        else 
-          {
-            free (curr_dir);
-            curr_dir = NULL;
+    while (curr_dir && get_next_part (part, &path)) 
+      {
+        dir_close (parent_dir);
+        parent_dir = curr_dir;
+        if (dir_lookup (curr_dir, part, &inode_next))
+          if (inode_is_dir (inode_next))
+            curr_dir = dir_open (inode_next); // parent != curr
+          else {
+            inode_close (inode_next);
+            curr_dir = NULL; //parent = curr
           }
-      else
-        {
-          free (curr_dir);;
-          curr_dir = NULL;
-        }
-    }
-  if (!get_next_part (part, &path)) {
-    if (curr_dir)
+        else
+          curr_dir = NULL; //parent = curr
+      }
+    if (!get_next_part (part, &path)) {
       dir_close (curr_dir);
-    return inode_parent;
+      return parent_dir;
+    }
+    dir_close (curr_dir);
+    dir_close (parent_dir);
+    return NULL;
   }
-  return NULL;
-}
 
 struct inode* 
 get_inode_from_path (char* path) 
@@ -604,12 +603,14 @@ get_inode_from_path (char* path)
   while (curr_dir && get_next_part (part, &path)) 
     {
       if (dir_lookup (curr_dir, part, &inode_next))
+      {
+        dir_close (curr_dir);
         if (inode_is_dir (inode_next))
           curr_dir = dir_open (inode_next);
         else {
-          dir_close (curr_dir);
           curr_dir = NULL;
         }
+      }
       else
       {
         dir_close (curr_dir);

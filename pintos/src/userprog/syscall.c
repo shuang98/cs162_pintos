@@ -208,6 +208,7 @@ syscall_handler (struct intr_frame *f UNUSED)
                 new_dir = dir_open (inode);
               else 
                 {
+                  inode_close (inode);
                   f->eax = 0;
                   return;
                 }
@@ -223,15 +224,14 @@ syscall_handler (struct intr_frame *f UNUSED)
                   f->eax = 0;
                   break;
                 }
-              struct inode* inode = get_inode_from_path_parent (args[1]);
-              if (inode == NULL) {
+              struct dir* parent_dir = get_parent_dir_from_path (args[1]);
+              if (parent_dir == NULL) {
                 f->eax = 0;
                 break;
               }
               char part[NAME_MAX + 1];
               while (get_next_part (part, &args[1])){}
               char* new_dir_name = part;
-              struct dir* parent_dir = dir_open (inode);
               struct inode* test;
               if (dir_lookup (parent_dir, new_dir_name, &test)) {
                 inode_close (test);
@@ -255,6 +255,7 @@ syscall_handler (struct intr_frame *f UNUSED)
               struct inode* parent_inode = dir_get_inode(parent_dir);
               dir_add (new_dir, str2, inode_get_inumber (parent_inode));
               dir_close (new_dir);
+              dir_close (parent_dir);
               f->eax = 1;
               return;
             }

@@ -575,16 +575,9 @@ create (const char *file, unsigned initial_size)
   block_sector_t inode_sector = 0;
   if (strlen(file) == 0 || strlen(file) > NAME_MAX) 
     return false;
-  struct dir *dir = NULL;
-  struct inode* inode = get_inode_from_path_parent(file);
-  if (inode_is_removed (inode)) {
+  struct dir *dir = get_parent_dir_from_path (file);
+  if (inode_is_removed (dir_get_inode (dir)))
     return false;
-  }
-  if (inode && inode_is_dir (inode)){
-    dir = dir_open (inode);
-  } else {
-    return false;
-  }
   char part[NAME_MAX + 1];
   while (get_next_part (part, &file)){}
   bool success = dir != NULL;
@@ -607,39 +600,38 @@ remove (const char *file)
   // return filesys_remove (file);
   if (is_root(file))
     return false;
-  struct dir *dir = NULL;
-  struct inode* inode = get_inode_from_path_parent(file);
-  if (inode_is_dir (inode)){
-    dir = dir_open (inode);
-    
-  } else {
+  struct dir *dir = get_parent_dir_from_path (file);
+  if (dir == NULL)
     return false;
-  }
   
   char part[NAME_MAX + 1];
   while (get_next_part (part, &file)){}
   struct inode* del;
   if (dir_lookup (dir, part, &del))
     if (inode_is_dir (del)) 
-    {
-      struct dir *del_dir = dir_open (del);
-      char name[NAME_MAX + 1];
-      int count = 0;
-      while (dir_readdir (del_dir, name)) {
-        count++;
+      {
+        struct dir *del_dir = dir_open (del);
+        char name[NAME_MAX + 1];
+        int count = 0;
+        while (dir_readdir (del_dir, name)) {
+          count++;
+        }
+        if (count > 0) {
+          dir_close (dir);
+          dir_close (del_dir);
+          return false;
+        }
+        dir_remove (del_dir, ".");
+        dir_remove (del_dir, "..");
+        dir_close (del_dir);
       }
-      if (count > 0) {
-        dir_close (dir);
-        return false;
-      }
-      dir_remove (del_dir, ".");
-      dir_remove (del_dir, "..");
-      dir_close (del_dir);
+    else {
+      inode_close (del);
     }
   bool success = dir != NULL && dir_remove (dir, part);
   dir_close (dir);
 
-  return success;
+  return true;
 }
 
 int
@@ -654,7 +646,6 @@ open (const char *file)
     open_file = file_open (inode);
   else
     return -1;
-
   // if (dir != NULL)
   //   dir_lookup (dir, name, &inode);
   // dir_close (dir);
@@ -664,6 +655,12 @@ open (const char *file)
   //   return -1;
 
   struct fd_elem *file_node = (struct fd_elem *) malloc (sizeof (struct fd_elem));
+  if (file_node == NULL)
+    {
+      file_close (open_file);
+      return -1;
+    }
+    
   file_node->fd = 0;
   
   struct list_elem *e;
@@ -842,8 +839,9 @@ close (int fd)
         {
           if (f->dir)
             dir_close (f->dir);
-          else
-            free (f->file_ptr);
+          else {
+            file_close (f->file_ptr);
+          }
           list_remove (&f->table_elem);
           free (f);
           break;

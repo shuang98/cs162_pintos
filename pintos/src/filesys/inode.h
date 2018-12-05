@@ -22,7 +22,7 @@ off_t inode_length (const struct inode *);
 bool inode_is_dir (struct inode *);
 void set_dir (struct inode *);
 struct inode* get_inode_from_path (char*);
-struct inode* get_inode_from_path_parent (char* );
+struct dir* get_parent_dir_from_path (char*);
 char* get_last_part(char*);
 bool inode_is_removed(struct inode *);
 #endif /* filesys/inode.h */
