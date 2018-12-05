@@ -19,7 +19,10 @@ off_t inode_write_at (struct inode *, const void *, off_t size, off_t offset);
 void inode_deny_write (struct inode *);
 void inode_allow_write (struct inode *);
 off_t inode_length (const struct inode *);
-bool is_dir_inode (struct inode *);
+bool inode_is_dir (struct inode *);
 void set_dir (struct inode *);
-
+struct inode* get_inode_from_path (char*);
+struct dir* get_parent_dir_from_path (char*);
+char* get_last_part(char*);
+bool inode_is_removed(struct inode *);
 #endif /* filesys/inode.h */

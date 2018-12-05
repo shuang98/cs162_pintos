@@ -17,7 +17,9 @@ int write (int fd, void *buffer, unsigned size);
 void seek (int fd, unsigned position);
 unsigned tell (int fd);
 void close (int fd);
-int inumber (int fd);
+int fd_inumber (int fd);
+struct inode* fd_inode (int fd);
+struct dir* fd_dir (int fd);
 bool is_dir (int fd);
 
 #endif /* userprog/process.h */

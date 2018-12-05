@@ -30,6 +30,7 @@ dir_create (block_sector_t sector, size_t entry_cnt)
     {
       struct inode *inode = inode_open (sector);
       set_dir (inode);
+      inode_close (inode);
       return true;
     }
   else 
@@ -45,7 +46,7 @@ dir_open (struct inode *inode)
   if (inode != NULL && dir != NULL)
     {
       dir->inode = inode;
-      dir->pos = 0;
+      dir->pos = 2 * sizeof (struct dir_entry);
       return dir;
     }
   else
@@ -180,7 +181,6 @@ dir_add (struct dir *dir, const char *name, block_sector_t inode_sector)
   strlcpy (e.name, name, sizeof e.name);
   e.inode_sector = inode_sector;
   success = inode_write_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
-
  done:
   return success;
 }
@@ -216,7 +216,6 @@ dir_remove (struct dir *dir, const char *name)
   /* Remove inode. */
   inode_remove (inode);
   success = true;
-
  done:
   inode_close (inode);
   return success;

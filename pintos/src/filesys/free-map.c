@@ -18,6 +18,9 @@ free_map_init (void)
   if (free_map == NULL)
     PANIC ("bitmap creation failed--file system device is too large");
   bitmap_mark (free_map, FREE_MAP_SECTOR);
+  bitmap_mark (free_map, FREE_MAP_SECTOR + 1);
+  bitmap_mark (free_map, FREE_MAP_SECTOR + 2);
+  bitmap_mark (free_map, FREE_MAP_SECTOR + 3);
   bitmap_mark (free_map, ROOT_DIR_SECTOR);
   lock_init (&free_map_lock);
 }
