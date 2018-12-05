@@ -128,6 +128,7 @@ inode_extend (size_t start_block, size_t num_blocks, struct inode_disk* disk_ino
   struct indirect_inode* indirect = NULL;
   struct indirect_inode* doubly = NULL;
   struct indirect_inode* doubly_children[128];
+  memset (doubly_children, 0, sizeof (doubly_children));
   static char zeros[BLOCK_SECTOR_SIZE];
   size_t i;
   for(i = start_block; i < num_blocks + start_block; i++)
@@ -192,7 +193,7 @@ inode_extend (size_t start_block, size_t num_blocks, struct inode_disk* disk_ino
       block_write (fs_device, disk_inode->doubly_indirect, doubly);
       size_t i;
       int start = (start_block < 251) ? 0 : (start_block - 251) / 128;
-      for (i = start; i < ((start_block + num_blocks - 251) / 128); i++)
+      for (i = start; i < ((start_block + num_blocks - 251) / 128) + 1; i++)
         {
           block_write (fs_device, doubly->blocks[i], doubly_children[i]);
           free (doubly_children[i]);
