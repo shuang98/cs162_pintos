@@ -572,22 +572,7 @@ install_page (void *upage, void *kpage, bool writable)
 bool
 create (const char *file, unsigned initial_size)
 {
-  block_sector_t inode_sector = 0;
-  if (strlen(file) == 0 || strlen(file) > NAME_MAX) 
-    return false;
-  struct dir *dir = get_parent_dir_from_path (file);
-  if (inode_is_removed (dir_get_inode (dir)))
-    return false;
-  char part[NAME_MAX + 1];
-  while (get_next_part (part, &file)){}
-  bool success = dir != NULL;
-  success = success && free_map_allocate (1, &inode_sector);
-  success = success && inode_create (inode_sector, initial_size);
-  success = success && dir_add (dir, part, inode_sector);
-  if (!success && inode_sector != 0)
-    free_map_release (inode_sector, 1);
-  dir_close (dir);
-  return success;
+  return filesys_create (file, initial_size);
 }
 
 bool is_root (const char *file) {

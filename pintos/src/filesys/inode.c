@@ -227,7 +227,7 @@ inode_create (block_sector_t sector, off_t length)
       size_t sectors = bytes_to_sectors (length);
       disk_inode->length = length;
       disk_inode->magic = INODE_MAGIC;
-      
+      // printf ("INODE_EXTEND, SECTORS %i, INODE_SECTOR: %i, LENGTH %i\n", sectors, sector, length);
       bool result = inode_extend (0, sectors, disk_inode, sector);
       free (disk_inode);
       return result;
@@ -566,7 +566,7 @@ get_last_part(char* path)
 struct dir* get_parent_dir_from_path (char* path) 
   {
     char part[NAME_MAX + 1];
-    struct dir *curr_dir = (is_relative (path)) ? dir_reopen (thread_current ()->working_dir) : dir_open_root();
+    struct dir *curr_dir = (is_relative (path) && thread_current ()->working_dir) ? dir_reopen (thread_current ()->working_dir) : dir_open_root();
     struct inode *inode_next = dir_get_inode (curr_dir);
     // struct inode *inode_parent = NULL;
     struct dir* parent_dir = NULL;
