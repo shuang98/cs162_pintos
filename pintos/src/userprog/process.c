@@ -620,9 +620,10 @@ remove (const char *file)
 int
 open (const char *file)
 {
-  if (strlen(file) == 0 || strlen(file) > NAME_MAX) 
+  if (strlen(file) == 0) 
     return -1;
   // struct dir *dir = dir_open_root ();
+  // printf ("OPEN FILE %s\n", file);
   struct inode *inode = get_inode_from_path(file);
   struct file *open_file;
   if (inode && !inode_is_removed (inode))
