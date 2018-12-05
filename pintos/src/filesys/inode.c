@@ -193,7 +193,7 @@ inode_extend (size_t start_block, size_t num_blocks, struct inode_disk* disk_ino
       block_write (fs_device, disk_inode->doubly_indirect, doubly);
       size_t i;
       int start = (start_block < 251) ? 0 : (start_block - 251) / 128;
-      for (i = start; i < ((start_block + num_blocks - 251) / 128) + 1; i++)
+      for (i = start; i < ((start_block + num_blocks - 251 - 1) / 128) + 1; i++)
         {
           block_write (fs_device, doubly->blocks[i], doubly_children[i]);
           free (doubly_children[i]);
