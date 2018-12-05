@@ -516,6 +516,7 @@ void
 set_dir (struct inode *inode)
 {
   inode->data.is_dir = true;
+  block_write (fs_device, inode->sector, &inode->data);
 }
 bool
 is_relative (char *path)
@@ -602,6 +603,11 @@ get_inode_from_path (char* path)
 
   while (curr_dir && get_next_part (part, &path)) 
     {
+      if (inode_is_removed (dir_get_inode (curr_dir)))
+      {
+        dir_close (curr_dir);
+        return NULL;
+      }
       if (dir_lookup (curr_dir, part, &inode_next))
       {
         dir_close (curr_dir);

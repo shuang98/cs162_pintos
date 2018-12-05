@@ -597,7 +597,6 @@ bool is_root (const char *file) {
 bool
 remove (const char *file)
 {
-  // return filesys_remove (file);
   if (is_root(file))
     return false;
   struct dir *dir = get_parent_dir_from_path (file);
@@ -621,8 +620,8 @@ remove (const char *file)
           dir_close (del_dir);
           return false;
         }
-        dir_remove (del_dir, ".");
-        dir_remove (del_dir, "..");
+        // dir_remove (del_dir, ".");
+        // dir_remove (del_dir, "..");
         dir_close (del_dir);
       }
     else {
@@ -630,7 +629,6 @@ remove (const char *file)
     }
   bool success = dir != NULL && dir_remove (dir, part);
   dir_close (dir);
-
   return true;
 }
 
@@ -642,10 +640,13 @@ open (const char *file)
   // struct dir *dir = dir_open_root ();
   struct inode *inode = get_inode_from_path(file);
   struct file *open_file;
-  if (inode)
+  if (inode && !inode_is_removed (inode))
     open_file = file_open (inode);
   else
-    return -1;
+    {
+      inode_close (inode);
+      return -1;
+    }
   // if (dir != NULL)
   //   dir_lookup (dir, name, &inode);
   // dir_close (dir);

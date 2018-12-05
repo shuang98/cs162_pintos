@@ -114,20 +114,6 @@ syscall_handler (struct intr_frame *f UNUSED)
                 }
               f->eax = dir_readdir (dir, args[2]);
               break;
-              // struct file *valid = filesys_open (args[2]);
-              // if (valid == NULL)
-              //   f->eax = 0;
-              // filesys_remove (args[2]);
-              // struct list_elem *e;
-              // struct dir *dir;
-              // struct thread *curr_thread = thread_current ();
-              // for (e = list_begin (curr_thread->fd_root); e != list_end (curr_thread->fd_root); e = list_next (e))
-              //   {
-              //     struct fd_elem *f = list_entry (e, struct fd_elem, table_elem);
-              //     if (f->fd == args[1])
-              //       {
-              //       }
-              //   }
             }
           break;
         }
@@ -244,8 +230,14 @@ syscall_handler (struct intr_frame *f UNUSED)
                   f->eax = 0;
                   return;
                 }
+              if (!dir_create (sector, 2)) 
+                {
+                  dir_close (parent_dir);
+                  free_map_release (sector, 1);
+                  f->eax = 0;
+                  return;
+                }
               dir_add (parent_dir, new_dir_name, sector);
-              dir_create (sector, 2);
               struct inode *new_dir_inode;
               dir_lookup (parent_dir, new_dir_name, &new_dir_inode);
               struct dir *new_dir = dir_open (new_dir_inode);

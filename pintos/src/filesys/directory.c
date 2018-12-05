@@ -30,6 +30,7 @@ dir_create (block_sector_t sector, size_t entry_cnt)
     {
       struct inode *inode = inode_open (sector);
       set_dir (inode);
+      inode_close (inode);
       return true;
     }
   else 
