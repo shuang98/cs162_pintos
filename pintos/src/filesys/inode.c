@@ -224,10 +224,9 @@ inode_create (block_sector_t sector, off_t length)
   disk_inode = calloc (1, sizeof *disk_inode);
   if (disk_inode != NULL)
     {
-      size_t sectors = bytes_to_sectors (length);
+      size_t sectors = (length) ? bytes_to_sectors (length) : 1;
       disk_inode->length = length;
       disk_inode->magic = INODE_MAGIC;
-      // printf ("INODE_EXTEND, SECTORS %i, INODE_SECTOR: %i, LENGTH %i\n", sectors, sector, length);
       bool result = inode_extend (0, sectors, disk_inode, sector);
       free (disk_inode);
       return result;
@@ -598,7 +597,7 @@ struct inode*
 get_inode_from_path (char* path) 
 {
   char part[NAME_MAX + 1];
-  struct dir *curr_dir = (is_relative (path)) ? dir_reopen (thread_current ()->working_dir) : dir_open_root();
+  struct dir *curr_dir = (is_relative (path) && thread_current ()->working_dir) ? dir_reopen (thread_current ()->working_dir) : dir_open_root();
   struct inode *inode_next = dir_get_inode (curr_dir);
 
   while (curr_dir && get_next_part (part, &path)) 
